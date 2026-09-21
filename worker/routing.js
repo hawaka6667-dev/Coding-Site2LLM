@@ -6,7 +6,8 @@
 const PLATFORMS = [
     ExercismAdapter,
     ExercismOverviewAdapter,
-    LeetCodeAdapter
+    LeetCodeAdapter,
+    CodewarsAdapter
 ];
 
 function cleanLeetCodeDescription(text) {

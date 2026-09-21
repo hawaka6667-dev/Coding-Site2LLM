@@ -12,6 +12,9 @@ const EXERCISM_OVERVIEW_URL =
 const LEETCODE_URL =
     /^https:\/\/leetcode\.com\/problems\/[^/]+\/?/;
 
+const CODEWARS_URL =
+    /^https:\/\/(?:www\.)?codewars\.com\/kata\/[^/?#]+(?:[/?#]|$)/;
+
 const DEEPSEEK_URL =
     /^https:\/\/(chat\.)?deepseek\.com\//;
 

@@ -77,6 +77,26 @@ test("selects the LeetCode adapter for problem pages", () => {
     assert.equal(name, "LeetCode");
 });
 
+test("selects the Codewars adapter for kata pages", () => {
+    const { context } = loadWorker();
+    const result = vm.runInContext(
+        "({ base: getPlatform('https://www.codewars.com/kata/55c45be3b2079ecccb00010b').name, training: getPlatform('https://www.codewars.com/kata/55c45be3b2079ecccb00010b/train/javascript').name, bare: getPlatform('https://codewars.com/kata/55c45be3b2079ecccb00010b').name })",
+        context
+    );
+
+    assert.equal(result.base, "Codewars");
+    assert.equal(result.training, "Codewars");
+    assert.equal(result.bare, "Codewars");
+});
+
+test("does not treat unrelated Codewars pages as kata pages", () => {
+    const { context } = loadWorker();
+    assert.throws(
+        () => vm.runInContext("getPlatform('https://www.codewars.com/users/example')", context),
+        /not a supported coding exercise page/
+    );
+});
+
 test("recognizes DeepAI pages with common URL variants", () => {
     const { context } = loadWorker();
     const result = vm.runInContext(

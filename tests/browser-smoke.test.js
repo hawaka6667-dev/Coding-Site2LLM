@@ -17,6 +17,9 @@ const EXERCISM_URL =
 const LEETCODE_URL =
     /^https:\/\/leetcode\.com\/problems\/[^/]+\/?/;
 
+const CODEWARS_URL =
+    /^https:\/\/(?:www\.)?codewars\.com\/kata\/[^/?#]+(?:[/?#]|$)/;
+
 const DEEPSEEK_URL =
     /^https:\/\/(chat\.)?deepseek\.com\//;
 
@@ -105,6 +108,31 @@ function pageExpression(platform) {
                 }
 
                 return { found: false, reason: "editor not found" };
+            })()
+        `;
+    }
+
+    if (platform === "Codewars") {
+        return `
+            (() => {
+                const visible = element =>
+                    element && element.offsetWidth > 0 && element.offsetHeight > 0;
+                const source = element => element.value || element.innerText || element.textContent || "";
+                const editors = [
+                    ...document.querySelectorAll(".CodeMirror .CodeMirror-code"),
+                    ...document.querySelectorAll(".cm-editor .cm-content"),
+                    ...document.querySelectorAll("textarea"),
+                    ...document.querySelectorAll('[contenteditable="true"]')
+                ];
+
+                for (const editor of editors) {
+                    const text = source(editor);
+                    if (visible(editor) && text.trim()) {
+                        return { found: true, method: "Codewars editor", characters: text.length };
+                    }
+                }
+
+                return { found: false, reason: "Codewars editor is not rendered yet" };
             })()
         `;
     }
@@ -214,6 +242,7 @@ async function testPlatform(platform, target) {
 function platformFor(url) {
     if (EXERCISM_URL.test(url)) return "Exercism";
     if (LEETCODE_URL.test(url)) return "LeetCode";
+    if (CODEWARS_URL.test(url)) return "Codewars";
     if (DEEPSEEK_URL.test(url)) return "DeepSeek";
     return null;
 }
@@ -256,7 +285,7 @@ async function main() {
 
     if (selected.length === 0) {
         console.error(
-            "No supported page found. Open Exercism, LeetCode, or DeepSeek first."
+            "No supported page found. Open Exercism, LeetCode, Codewars, or DeepSeek first."
         );
         process.exitCode = 1;
         return;

@@ -23,7 +23,8 @@
 
 
 /后续
-添加更多做题网站支持，如牛客网、codewar。。            +测试
+添加更多做题网站支持，如牛客网。。            +测试
+Codewars 自动运行测试、提交答案和自动完成状态
 优化icon
 寻找社区issue然后过去发帖    包括但不限于国内外
 自动爬取git issue维护 No newline at end of file No newline at end of file
