@@ -53,3 +53,12 @@ async function executePage(tabId, func, args = [], world = "MAIN") {
 
     return results[0]?.result;
 }
+
+async function executePageAllFrames(tabId, func, args = [], world = "MAIN") {
+    return chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        world,
+        func,
+        args
+    });
+}

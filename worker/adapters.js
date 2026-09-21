@@ -332,6 +332,18 @@ const LeetCodeAdapter = {
     }
 };
 
+function parseCodewarsFeedback(text) {
+    const normalized = String(text || "")
+        .replace(/\r\n?/g, "\n")
+        .trim();
+
+    if (!normalized || !/(?:test\s+results?|passed|failed|expected|actual|error)/i.test(normalized)) {
+        return "";
+    }
+
+    return normalized.slice(0, 30000);
+}
+
 const CodewarsAdapter = {
 
     name: "Codewars",
@@ -435,7 +447,51 @@ const CodewarsAdapter = {
             platform: this.name,
             title: value.title,
             description: value.description,
-            feedback: value.feedback,
+            feedback: [
+                value.feedback,
+                ...(
+                    await executePageAllFrames(tabId, () => {
+                        const visible = element =>
+                            element &&
+                            element.offsetWidth > 0 &&
+                            element.offsetHeight > 0;
+                        const textOf = element => {
+                            const copy = element.cloneNode(true);
+                            copy.querySelectorAll(
+                                "img, picture, svg, video, audio, canvas, iframe"
+                            ).forEach(media => media.remove());
+                            return copy.innerText?.trim() || "";
+                        };
+                        const selectors = [
+                            '[class*="test"]',
+                            '[class*="result"]',
+                            '[class*="output"]',
+                            '[class*="console"]',
+                            "body"
+                        ];
+                        const candidates = [];
+
+                        for (const selector of selectors) {
+                            for (const element of document.querySelectorAll(selector)) {
+                                if (!visible(element)) continue;
+                                const text = textOf(element);
+                                if (
+                                    text &&
+                                    text.length <= 30000 &&
+                                    /(?:test\s+results?|passed|failed|expected|actual|error)/i.test(text)
+                                ) {
+                                    candidates.push(text);
+                                }
+                            }
+                        }
+
+                        return candidates;
+                    })
+                ).flatMap(result => result.result || [])
+            ]
+                .map(parseCodewarsFeedback)
+                .filter(Boolean)
+                .sort((left, right) => right.length - left.length)[0] || "",
             source: value.source
         };
     }

@@ -9,6 +9,8 @@
  *
  * Optional:
  *   node tests/browser-smoke.test.js --port 9222 --json
+ *   node tests/browser-smoke.test.js --platform Codewars
+ *   node tests/browser-smoke.test.js --all
  */
 
 const EXERCISM_URL =
@@ -30,6 +32,11 @@ const port = Number(
         : process.argv[portArgumentIndex + 1]
 );
 const jsonOutput = process.argv.includes("--json");
+const allTargets = process.argv.includes("--all");
+const platformArgumentIndex = process.argv.indexOf("--platform");
+const requestedPlatform = platformArgumentIndex === -1
+    ? null
+    : process.argv[platformArgumentIndex + 1];
 
 function now() {
     return performance.now();
@@ -281,7 +288,10 @@ async function main() {
 
     const selected = targets
         .map(target => ({ target, platform: platformFor(target.url || "") }))
-        .filter(item => item.platform);
+        .filter(item =>
+            item.platform &&
+            (!requestedPlatform || item.platform === requestedPlatform)
+        );
 
     if (selected.length === 0) {
         console.error(
@@ -292,7 +302,8 @@ async function main() {
     }
 
     const results = [];
-    for (const item of selected) {
+    const targetsToCheck = allTargets ? selected : selected.slice(0, 1);
+    for (const item of targetsToCheck) {
         results.push(await testPlatform(item.platform, item.target));
     }
 
