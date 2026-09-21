@@ -161,7 +161,11 @@ test("intercepts Exercism Ctrl+Enter before editor newline handling", () => {
 
 test("supports the optional Exercism mark-complete confirmation chain", () => {
     const source = fs.readFileSync(
-        path.join(ROOT_DIR, "worker", "adapters.js"),
+        path.join(
+            ROOT_DIR,
+            "worker",
+            "extract_coding_site_context_with_site_adapters.js"
+        ),
         "utf8"
     );
 

@@ -56,7 +56,7 @@ MCP evaluate_script
    ↓
 确认
    ↓
-复制到 worker/adapters.js
+复制到 worker/extract_coding_site_context_with_site_adapters.js
 ```
 
 以后网站改版（DOM 变化、编辑器替换）时，用 MCP 直接跑诊断，不需要猜。

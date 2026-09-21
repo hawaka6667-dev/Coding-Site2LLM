@@ -1,0 +1,395 @@
+Kata Training
+
+Given a number of points on a plane, your task is to find two points with the smallest distance between them in linearithmic
+O(n log n) time.
+Example
+  1  2  3  4  5  6  7  8  9
+1  
+2    . A
+3                . D
+4                   . F       
+5             . C
+6              
+7                . E
+8    . B
+9                   . G
+
+For the plane above, the input will be: 
+[
+  [2,2], // A
+  [2,8], // B
+  [5,5], // C
+  [6,3], // D
+  [6,7], // E
+  [7,4], // F
+  [7,9]  // G
+]
+=> closest pair is: [[6,3],[7,4]] or [[7,4],[6,3]]
+(both answers are valid)
+
+[
+  [2,2], // A
+  [2,8], // B
+  [5,5], // C
+  [6,3], // D
+  [6,7], // E
+  [7,4], // F
+  [7,9]  // G
+]
+=> closest pair is: [[6,3],[7,4]] or [[7,4],[6,3]]
+(both answers are valid)
+
+(
+  (2,2), # A
+  (2,8), # B
+  (5,5), # C
+  (6,3), # D
+  (6,7), # E
+  (7,4), # F
+  (7,9)  # G
+)
+=> closest pair is: ((6,3),(7,4)) or ((7,4),(6,3))
+(both answers are valid. You can return a list of tuples too)
+
+The two points that are closest to each other are D and F.Expected answer should be an array with both points in any order.
+Goal
+The goal is to come up with a function that can find two closest points for any arbitrary array of points, in a linearithmic time. 
+Note: Don't use math.hypot, it's too slow...
+
+More information on wikipedia.
+
+                  
+                  AlgorithmsGeometryMathematics
+              
+              
+                
+                  Educator, struggling to assess your students?Assess your classroom or bootcamp with the world leading assessment platform, Qualified.Request your demo today!
+
+Kata TrainingHomeReport home for your next assignmentTrainingPracticeComplete challenging Kata to earn honor and ranks. Re-train to hone techniqueFreestyle SparringTake turns remixing and refactoring others code through KumiteCommunityLeaderboardsAchieve honor and move up the global leaderboardsChatJoin our Discord server and chat with your fellow code warriorsDiscussionsView our Github Discussions board to discuss general Codewars topicsAboutDocsLearn about all of the different aspects of CodewarsBlogRead the latest news from Codewars and the communityYou have not starred any kataTo add some, just click thenext to any kata title.4 kyuWell Done! You have ranked up to 4 kyu in Python.17 days ago500+ Honor: You now have the ability to moderate comments marked as having spoilers.17 days ago4 kyuPowerful you are. Your new overall rank is 4 kyu.17 days ago4 kyu624View ProfileAccount SettingsTraining SetupUpgrade to RedNew KataNew KumiteSign out
+
+  
+
+  
+    
+    
+      
+        
+          
+            3 kyu
+            Closest pair of points in linearithmic time
+            
+          
+          64264210689% of 277979 of 1,840kirjs1 Issue Reported
+        
+
+        
+          
+            
+              
+                
+                    
+                  
+                    
+                    Python
+                    Language
+                  
+
+                  
+                      
+                        
+                        Java
+                      
+                      
+                        
+                        JavaScript
+                      
+                      
+                        
+                        Python
+                      
+                      
+                        
+                        Rust
+                      
+                  
+                
+              
+            
+
+            
+              
+                
+                3.11
+                Language Version
+                
+                  
+                    3.8
+                  
+                    3.10
+                  
+                    3.11
+                  
+                
+              
+            
+          
+
+          
+            
+              
+                
+                  VIM
+                
+                
+                  EMACS
+                
+              
+            
+
+            
+              
+                
+                  
+                    
+                  
+                
+              
+            
+          
+        
+      
+    
+  
+
+  
+
+  
+    
+      
+        
+          
+            
+              Instructions
+            
+          
+          
+            
+              Output
+            
+          
+          
+
+          
+            
+              
+              Restore
+            
+          
+        
+
+        
+          
+            
+
+              
+                Given a number of points on a plane, your task is to find two points with the smallest distance between them in linearithmic
+O(n log n) time.
+Example
+  1  2  3  4  5  6  7  8  9
+1  
+2    . A
+3                . D
+4                   . F       
+5             . C
+6              
+7                . E
+8    . B
+9                   . G
+
+For the plane above, the input will be: 
+[
+  [2,2], // A
+  [2,8], // B
+  [5,5], // C
+  [6,3], // D
+  [6,7], // E
+  [7,4], // F
+  [7,9]  // G
+]
+=> closest pair is: [[6,3],[7,4]] or [[7,4],[6,3]]
+(both answers are valid)
+
+[
+  [2,2], // A
+  [2,8], // B
+  [5,5], // C
+  [6,3], // D
+  [6,7], // E
+  [7,4], // F
+  [7,9]  // G
+]
+=> closest pair is: [[6,3],[7,4]] or [[7,4],[6,3]]
+(both answers are valid)
+
+(
+  (2,2), # A
+  (2,8), # B
+  (5,5), # C
+  (6,3), # D
+  (6,7), # E
+  (7,4), # F
+  (7,9)  # G
+)
+=> closest pair is: ((6,3),(7,4)) or ((7,4),(6,3))
+(both answers are valid. You can return a list of tuples too)
+
+The two points that are closest to each other are D and F.Expected answer should be an array with both points in any order.
+Goal
+The goal is to come up with a function that can find two closest points for any arbitrary array of points, in a linearithmic time. 
+Note: Don't use math.hypot, it's too slow...
+
+More information on wikipedia.
+
+                  
+                  AlgorithmsGeometryMathematics
+              
+              
+                
+                  Educator, struggling to assess your students?Assess your classroom or bootcamp with the world leading assessment platform, Qualified.Request your demo today!
+                
+                
+                  
+                    
+                    
+                  
+                
+              
+            
+          
+
+          
+            
+              
+                
+                  Incorrect!
+                  
+                
+              
+            
+          
+
+          
+            
+              
+            
+          
+        
+      
+    
+
+    
+      
+        
+          
+            Solution
+          
+          
+            
+              xxxxxxxxxx91 1def closest_pair(points):2    def dist_sq(p1, p2):3        """Calculate squared distance between two points (faster than sqrt)."""4        dx = p1[0] - p2[0]5        dy = p1[1] - p2[1]6        return dx * dx + dy * dy7    8    def brute_force(pts):9        """Find closest pair in a small set using brute force."""10        min_dist = float('inf')11        best_pair = None12        n = len(pts)13        for i in range(n):14            for j in range(i + 1, n):15                d = dist_sq(pts[i], pts[j])16                if d < min_dist:17                    min_dist = d18                    best_pair = (pts[i], pts[j])19        return min_dist, best_pair20    21    def closest_pair_rec(pts_x, pts_y):22        """Recursive function.23        pts_x: points sorted by x-coordinate24        pts_y: same points sorted by y-coordinate25        """
+            
+          
+        
+
+        
+          
+            Sample Tests
+          
+          
+            
+              xxxxxxxxxx52 1def verify(points, expected):2    3    actual = closest_pair(points)4    if not actual or len(actual) != 2 or not all(pt and isinstance(pt,tuple) and len(pt)==2 for pt in actual):5        test.fail(f"Output should be a tuple or list of tuples: ((a,b), (x,y)), but got {actual}")6    else:7        exp,act = (sorted(stuff) for stuff in (expected, actual))8        test.assert_equals(act,exp)9​10​11​12@test.describe("Fixed tests")13def fixed():14    15    @test.it("Example of the description")16    def it1():17        points = (18            (2, 2), # A19            (2, 8), # B
+            
+          
+        
+
+        
+          
+                
+                  
+                  Skip
+                
+
+                  
+                    
+                    Unlock Solutions
+                  
+
+              
+                
+                
+                  Discuss (53)
+                
+              
+
+            
+              Reset
+            
+          
+
+          
+            
+              Test
+            
+            
+              Attempt
+            
+            
+              Submit
+            
+          
+        
+      
+    
+  
+
+ConfirmCancelConfirm<input data-bind-id="@id" data-bind-name="@name" data-bind-value="@value" type="hidden" /><div data-bind-class="field_class"><label data-bind-class="%required &amp;&amp; &#39;required&#39;" data-bind-for="@id" data-bind-if="%label"><abbr data-bind-if="%required" title="required">* </abbr><span data-bind-html="%label"></span></label><div data-bind-class="field_value_class"><input data-bind-id="@id" data-bind-name="@name" data-bind-type="%type || &#39;text&#39;" data-bind-value="@value | unescape_html || %defaultValue" /></div><include data-bind-each="@errors"><small data-bind-html="@"></small></include></div><div class="boolean" data-bind-class="field_class"><div class="field_value"><div><input data-bind-name="@name" type="hidden" value="false" /><label class="checkbox"><input class="form-checkbox rounded bg-gray-400 dark:bg-gray-600 border-transparent focus:border-transparent focus:bg-gray-400 text-gray-700 focus:ring-1 focus:ring-offset-2 dark:ring-offset-1 focus:ring-gray-500 dark:focus:ring-gray-700 dark:focus:ring-offset-gray-800 boolean" data-bind-checked="@value" data-bind-id="@id" data-bind-name="@name" type="checkbox" value="true" /><span data-bind-html="%label || @label"></span></label></div></div></div><div class="is-full-height" data-bind-class="field_class" data-bind-if="%style | eq::&#39;full&#39;"><div class="markdown-editor is-full-height mb-0"><div class="tabs is-full-height"><dl class="tabs"><dd class="is-active" data-tippy-content="Edit your message using markdown" data-tippy-placement="top"><a data-bind-html="{{%label}}" data-bind-if="%label" data-tab="markdown"></a><a data-bind-unless="%label" data-tab="markdown"><i class="icon-moon-edit "></i></a></dd><dd data-tippy-content="Preview your comment" data-tippy-placement="right"><a data-tab="preview"><i class="icon-moon-preview "></i></a></dd><dd data-tippy-content="Edit in full-screen mode" data-tippy-placement="left"><a class="js-expand"><i class="icon-moon-expand "></i></a></dd></dl><div class="clearfix"></div><ul class="tabs-content is-full-height"><li class="is-full-height is-active" data-tab="markdown"><div class="text-editor-container is-full-height"><textarea class="is-hidden" data-bind-id="@id" data-bind-name="@name" data-bind-value="@value"></textarea><div class="text-editor js-editor has-shadow"></div><div class="editor-msg-container is-hidden"><div class="alert-box"></div></div></div></li><li class="is-full-height" data-tab="preview"><div class="panel bg-ui-section is-overflow-auto"><div class="markdown prose max-w-none"><p>Your rendered <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target="_blank" rel="noopener">github-flavored</a> markdown will appear here.</p></div></div></li></ul></div></div></div><div data-bind-class="field_class" data-bind-if="%style | ne::&#39;full&#39;"><label data-bind-class="%required &amp;&amp; &#39;required&#39;" data-bind-for="@id" data-bind-if="%label"><abbr data-bind-if="%required" title="required">* </abbr><span data-bind-html="%label"></span></label><div class="markdown-editor is-tall" data-bind-class="%markdownEditorClass"><div class="tabs"><dl class="tabs"><dd class="is-active" data-tippy-content="Edit your message using markdown" data-tippy-placement="top"><a data-tab="markdown"><i class="icon-moon-edit "></i></a></dd><dd data-tippy-content="Preview your comment" data-tippy-placement="right"><a data-tab="preview"><i class="icon-moon-preview "></i></a></dd><dd data-tippy-content="Edit in full-screen mode" data-tippy-placement="right"><a class="js-expand"><i class="icon-moon-expand "></i></a></dd></dl><ul class="tabs-content"><li class="is-full-height is-active" data-tab="markdown"><div class="text-editor-container is-full-height"><textarea class="is-hidden" data-bind-id="@id" data-bind-name="@name" data-bind-value="@value"></textarea><div class="text-editor js-editor has-shadow"></div><div class="editor-msg-container is-hidden"><div class="alert-box"></div></div></div></li><li class="is-full-height" data-tab="preview"><div class="panel bg-ui-section is-overflow-auto"><div class="markdown prose max-w-none"><p>Your rendered <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target="_blank" rel="noopener">github-flavored</a> markdown will appear here.</p></div></div></li></ul></div></div></div><div class="text-editor-container" data-bind-class="field_class" data-bind-id="{{@id}}_field"><label data-bind-class="%required &amp;&amp; &#39;required&#39;" data-bind-for="@id" data-bind-if="%label"><abbr data-bind-if="%required" title="required">* </abbr><span data-bind-html="%label"></span></label><textarea class="is-hidden" data-bind-id="@id" data-bind-name="@name" data-bind-value="@value"></textarea><div class="text-editor js-editor has-shadow"></div><div class="commands-container"><ul class="is-unstyled"><li class="expand" title="Maximize Editor (esc key)"><a><i class="icon-moon-expand "></i></a></li><li class="shrink is-hidden" title="Shrink Editor (esc key)"><a><i class="icon-moon-collapse "></i></a></li></ul></div><div class="editor-msg-container is-hidden"><div class="alert-box"></div></div></div>
+  
+    
+      Collect: undefined
+    
+
+    
+      Loading collection data...
+    
+    
+  
+
+document.addEventListener("turbolinks:load", (event) => {
+  const currentUser = JSON.parse("{\"username\":\"hawaka6667-dev\",\"email\":\"hawaka6667@gmail.com\",\"role\":\"standard\",\"guest\":false,\"honor\":624,\"rank\":-4,\"bootcamp_interest\":null,\"career_paths\":[],\"andela_interest\":null,\"phone\":null,\"current_language\":\"python\",\"country_name\":null,\"blocked_user_ids\":[],\"blocked_by_user_ids\":[],\"jwt\":\"eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjZhNjBlMTNjZTkwMmI2ODg5NzZlMTk4NCIsImV4cCI6MTc5MDg1NDAyMH0.aanT0PvJZxwZJkH-piREoWXB2vPO8mJgvmvONyHEYDI\",\"experience\":\"junior\",\"subscriber\":false,\"hideAds\":false,\"id\":\"6a60e13ce902b688976e1984\",\"starred_code_challenge_ids\":[],\"can_resolve_comments\":false,\"can_report_comments\":true,\"avatar_tag\":\"\\u003cimg title=\\\"hawaka6667-dev\\\" data-tippy-content=\\\"hawaka6667-dev\\\" data-tippy-placement=\\\"bottom\\\" alt=\\\"hawaka6667-dev Avatar\\\" src=\\\"https://www.codewars.com/avatars/6a60e13ce902b688976e1984\\\" /\\u003e\"}");
+  if (typeof gtag === "function" && event.data.url) {
+    const url = new URL(event.data.url);
+    // Clear query params for these paths
+    if (["/users/password/edit", "/users/confirmation"].includes(url.pathname)) url.search = "";
+    const config = {
+      page_location: url.toString(),
+      page_title: event.target.title,
+    };
+    if (!currentUser.guest && currentUser.id) config.user_id = currentUser.id;
+    gtag("config", "G-M3JYSQLS8M", config);
+    if (!currentUser.guest && currentUser.experience) {
+      gtag("set", "user_properties", {
+        career_level: currentUser.experience,
+        rank: currentUser.rank,
+        bootcamp_interest: currentUser.bootcamp_interest || "unknown",
+      });
+    }
+  }
+  App.setup({
+    env: "production",
+    currentUser,
+    data: JSON.parse("{\"routes\":{},\"controllerName\":\"code_challenges\",\"id\":\"5376b901424ed4f8c20002b7\",\"challengeName\":\"Closest pair of points in linearithmic time\",\"authorUsername\":\"kirjs\",\"now\":\"2026-09-21T11:27:00.794Z\",\"activeLanguage\":\"python\",\"description\":\"Given a number of points on a plane, your task is to find two points with the smallest distance between them in linearithmic\\n[O(n log n)](http://en.wikipedia.org/wiki/Time_complexity#Linearithmic_time) time.\\n\\n### Example\\n\\n```\\n  1  2  3  4  5  6  7  8  9\\n1  \\n2    . A\\n3                . D\\n4                   . F       \\n5             . C\\n6              \\n7                . E\\n8    . B\\n9                   . G\\n\\n```\\nFor the plane above, the input will be: \\n\\n```javascript\\n[\\n  [2,2], // A\\n  [2,8], // B\\n  [5,5], // C\\n  [6,3], // D\\n  [6,7], // E\\n  [7,4], // F\\n  [7,9]  // G\\n]\\n=\\u003e closest pair is: [[6,3],[7,4]] or [[7,4],[6,3]]\\n(both answers are valid)\\n```\\n```java\\n[\\n  [2,2], // A\\n  [2,8], // B\\n  [5,5], // C\\n  [6,3], // D\\n  [6,7], // E\\n  [7,4], // F\\n  [7,9]  // G\\n]\\n=\\u003e closest pair is: [[6,3],[7,4]] or [[7,4],[6,3]]\\n(both answers are valid)\\n```\\n```python\\n(\\n  (2,2), # A\\n  (2,8), # B\\n  (5,5), # C\\n  (6,3), # D\\n  (6,7), # E\\n  (7,4), # F\\n  (7,9)  # G\\n)\\n=\\u003e closest pair is: ((6,3),(7,4)) or ((7,4),(6,3))\\n(both answers are valid. You can return a list of tuples too)\\n```\\n\\nThe two points that are closest to each other are D and F.  \\nExpected answer should be an array with both points in any order.\\n\\n### Goal\\nThe goal is to come up with a function that can find two closest points for any arbitrary array of points, in a linearithmic time. \\n\\n~~~if:python\\n**Note:** Don't use `math.hypot`, it's too slow...\\n~~~\\n~~~if:javascript\\n-----\\n_**Note:** for compatibility reasons, your function will be called with one additional parameter, a distance calculation function. However you can completely ignore it, and you do not have to account for it - it's there only to keep compatibility with old solutions._\\n~~~\\n\\n~~~if:java\\n-----\\n`Point` class is preloaded for you as:\\n\\n```java\\npublic class Point {\\n\\tpublic double x, y;\\n\\n\\tpublic Point() {\\n\\t\\tx = y = 0.0;\\n\\t}\\n\\n\\tpublic Point(double x, double y) {\\n\\t\\tthis.x = x;\\n\\t\\tthis.y = y;\\n\\t}\\n\\n\\t@Override\\n\\tpublic String toString() {\\n\\t\\treturn String.format(\\\"(%f, %f)\\\", x, y);\\n\\t}\\n\\n\\t@Override\\n\\tpublic int hashCode() {\\n\\t\\treturn Double.hashCode(x) ^ Double.hashCode(y);\\n\\t}\\n\\n\\t@Override\\n\\tpublic boolean equals(Object obj) {\\n\\t\\tif (obj instanceof Point) {\\n\\t\\t\\tPoint other = (Point) obj;\\n\\t\\t\\treturn x == other.x \\u0026\\u0026 y == other.y;\\n\\t\\t} else {\\n\\t\\t\\treturn false;\\n\\t\\t}\\n\\t}\\n}\\n```\\n~~~\\n\\n-----\\nMore information on [wikipedia](http://en.wikipedia.org/wiki/Closest_pair_of_points_problem).\",\"category\":\"algorithms\",\"published\":true,\"retired\":false,\"previousSolutions\":null,\"completedKata\":false,\"progress\":{\"any\":1,\"python\":1}}"),
+    routes: {"user_profile":"/users/hawaka6667-dev","user_stars":"/user/stars","star_code_challenge":"/users/stars/%7Bid%7D","mark_notifications_read":"/users/notifications/mark_read","unread_popup_notifications":"/users/notifications/unread_popups","collections":"/api/v1/collections","collection_code_challenge":"/api/v1/collections/%7BcollectionId%7D/code_challenges/%7Bid%7D","session":"/kata/projects/6ab0993c831b6800186cc7b0/%7Blanguage%7D/session","notify":"/api/v1/code-challenges/projects/6ab0993c831b6800186cc7b0/solutions/%7BsolutionId%7D/notify","finalize":"/api/v1/code-challenges/projects/6ab0993c831b6800186cc7b0/solutions/%7BsolutionId%7D/finalize","skip":"/kata/projects/6ab0993c831b6800186cc7b0/skip","report":"/kata/5376b901424ed4f8c20002b7","comments":"/kata/5376b901424ed4f8c20002b7/discuss/python","solutions":"/kata/5376b901424ed4f8c20002b7/solutions/%7Blanguage%7D","editor":"/kata/5376b901424ed4f8c20002b7/edit/%7Blanguage%7D","forfeit":"/kata/5376b901424ed4f8c20002b7/solutions?show-solutions=1"},
+    pageControllerName: 'CodeChallenges.PlayController',
+  });
+}, { once: true });
+
+1def closest_pair(points):2    def dist_sq(p1, p2):3        """Calculate squared distance between two points (faster than sqrt)."""4        dx = p1[0] - p2[0]5        dy = p1[1] - p2[1]6        return dx * dx + dy * dy7    8    def brute_force(pts):9        """Find closest pair in a small set using brute force."""10        min_dist = float('inf')11        best_pair = None12        n = len(pts)13        for i in range(n):14            for j in range(i + 1, n):15                d = dist_sq(pts[i], pts[j])16                if d < min_dist:17                    min_dist = d18                    best_pair = (pts[i], pts[j])19        return min_dist, best_pair20    21    def closest_pair_rec(pts_x, pts_y):22        """Recursive function.23        pts_x: points sorted by x-coordinate24        pts_y: same points sorted by y-coordinate25        """
