@@ -85,10 +85,6 @@ const ExercismAdapter = {
             throw new Error(submitted?.reason || "Could not submit Exercism solution.");
         }
 
-        const overviewUrl = await waitForExercismOverview(tabId);
-        if (overviewUrl) {
-            await ExercismOverviewAdapter.markComplete(tabId);
-        }
     },
 
     async getContext(tabId) {
@@ -509,25 +505,6 @@ const ExercismOverviewAdapter = {
         await completeExercismExercise(tabId);
     }
 };
-
-async function waitForExercismOverview(tabId, timeout = 10000) {
-    const start = performance.now();
-
-    while (performance.now() - start < timeout) {
-        try {
-            const url = await executePage(tabId, () => window.location.href);
-            if (EXERCISM_OVERVIEW_URL.test(url)) {
-                return url;
-            }
-        } catch (_) {
-            // The tab may be between the editor and overview documents.
-        }
-
-        await sleep(100);
-    }
-
-    return "";
-}
 
 async function completeExercismExercise(tabId) {
     let markedComplete = false;

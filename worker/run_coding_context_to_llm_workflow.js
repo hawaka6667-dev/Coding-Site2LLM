@@ -48,6 +48,7 @@ async function runWorkflowOnce() {
 
     start = performance.now();
     const context = await platform.getContext(currentTab.id);
+    console.log("[workflow] context diagnostics:", diagnoseContext(context));
     const prompt = buildPrompt(context);
     mark(`${platform.name}.getSource`, start);
     console.log("[workflow] prompt:", prompt.length, "characters");
@@ -96,17 +97,11 @@ async function runExercismTestSubmit() {
     }
 
     const platform = getPlatform(currentTab.url);
-    if (typeof platform.testAndSubmit === "function") {
-        await platform.testAndSubmit(currentTab.id);
-        return;
+    if (typeof platform.testAndSubmit !== "function") {
+        throw new Error("Exercism test and submit is not supported on this page.");
     }
 
-    if (typeof platform.markComplete === "function") {
-        await platform.markComplete(currentTab.id);
-        return;
-    }
-
-    throw new Error("Exercism automation is not supported on this page.");
+    await platform.testAndSubmit(currentTab.id);
 }
 
 chrome.action.onClicked.addListener(async () => {
@@ -127,12 +122,31 @@ chrome.commands.onCommand.addListener(async command => {
     }
 });
 
-chrome.runtime.onMessage.addListener(message => {
-    if (message?.type !== "exercism-test-submit") {
+chrome.runtime.onMessage.addListener((message, sender) => {
+    if (message?.type === "exercism-test-submit") {
+        runExercismTestSubmit().catch(error => {
+            console.error("[exercism] test and submit ERROR:", error);
+        });
         return;
     }
 
-    runExercismTestSubmit().catch(error => {
-        console.error("[exercism] test and submit ERROR:", error);
+    if (message?.type !== "exercism-mark-complete") {
+        return;
+    }
+
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+        console.error("[exercism] mark complete ERROR: sender tab not found.");
+        return;
+    }
+
+    const platform = getPlatform(sender.tab.url);
+    if (typeof platform.markComplete !== "function") {
+        console.error("[exercism] mark complete ERROR: unsupported page.");
+        return;
+    }
+
+    platform.markComplete(tabId).catch(error => {
+        console.error("[exercism] mark complete ERROR:", error);
     });
 });

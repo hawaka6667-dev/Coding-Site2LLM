@@ -2,9 +2,12 @@
   "name": "coding-site2llm",
   "private": true,
   "scripts": {
-    "test": "node --test tests/unit-core.test.js",
-    "test:contracts": "node --test tests/unit-routing.test.js",
-    "test:all": "npm test && npm run test:contracts",
-    "smoke": "node tests/browser-smoke.test.js"
+    "test": "npm run test:unit",
+    "test:unit": "node --test tests/minimal-core-feature.test.js",
+    "test:routing": "node --test tests/local-routing.test.js",
+    "test:contracts": "node --test tests/global-extension-contract.test.js",
+    "test:setup": "node --test tests/development-environment.test.js",
+    "test:all": "npm run test:unit && npm run test:routing && npm run test:contracts && npm run test:setup",
+    "smoke": "node tests/deprecated/browser-smoke.test.js"
   }
 }

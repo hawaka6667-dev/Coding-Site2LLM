@@ -60,3 +60,19 @@ function buildPrompt(context) {
 
     return sections.filter(Boolean).join("\n\n");
 }
+
+function diagnoseContext(context) {
+    const fields = ["title", "description", "source", "language", "feedback"];
+    const values = Object.fromEntries(fields.map(field => {
+        const value = typeof context?.[field] === "string"
+            ? context[field].trim()
+            : "";
+
+        return [field, { present: Boolean(value), length: value.length }];
+    }));
+
+    return {
+        platform: context?.platform || "unknown",
+        fields: values
+    };
+}

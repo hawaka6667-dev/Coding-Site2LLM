@@ -35,6 +35,18 @@
         "content.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://exercism.org/tracks/*/exercises/*"
+      ],
+      "exclude_matches": [
+        "https://exercism.org/tracks/*/exercises/*/edit*"
+      ],
+      "js": [
+        "worker/auto_mark_exercism_complete.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "action": {
@@ -49,7 +61,7 @@
   "commands": {
     "run-workflow": {
       "suggested_key": {
-        "default": "Ctrl+Shift+E"
+        "default": "Alt+Q"
       },
       "description": "Send coding-site context to an LLM"
     }

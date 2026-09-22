@@ -4,7 +4,7 @@ A Chrome extension that captures coding-site context from Exercism, LeetCode, an
 
 ## Features
 
-- 🎯 One-click send: `Ctrl+Shift+E` or click the extension button
+- 🎯 One-click send: `Alt+Q` or click the extension button
 - 🌐 Support for Exercism and LeetCode, with extensibility for more sites
 - 🤖 Works with DeepSeek, ChatGPT, Claude, Gemini, and DeepAI
 - ⚡ Captures coding context and inserts it into the active LLM tab

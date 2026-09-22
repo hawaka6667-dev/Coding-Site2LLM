@@ -1,10 +1,14 @@
 /*
+ * @deprecated Legacy HTTP remote-debugging smoke test.
+ * Use Chrome DevTools MCP for live page probes instead.
+ *
  * Browser smoke test for website adapters.
  *
  * Keep this test focused on page-side selectors and editor availability. The
  * extension workflow itself is covered by tests/unit-routing.test.js.
  *
- * Start Chrome with remote debugging enabled, then run:
+ * This legacy test requires Chrome's HTTP remote-debugging endpoint. Start
+ * Chrome with remote debugging enabled, then run:
  *   node tests/browser-smoke.test.js
  *
  * Optional:

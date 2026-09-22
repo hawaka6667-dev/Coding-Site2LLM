@@ -1,4 +1,4 @@
-设计文档
+设计文档   -  定位是草案
 //
 // 作用   让llm获得充分的原生网站题目信息
 
@@ -13,7 +13,7 @@ issue
 
 流程功能测试
 ```text
-当前编程页面   ctrl shift e触发✔
+当前编程页面   Alt+Q触发✔
   -> 抓取题面、代码、可见测试反馈✔
   -> 查找附近的 LLM 标签页✔
   -> 找不到则在左侧创建 DeepSeek✔
@@ -33,13 +33,11 @@ issue
 /后续
 添加更多做题网站支持，如牛客网。。            +测试
 优化icon
+/维护
 寻找社区issue然后过去发帖    包括但不限于国内外
 自动爬取git issue维护 No newline at end of file No newline at end of file
+adapter 维护专用诊断工具：scripts/check-adapters.js，防止官网更新导致抓取失效
 
-adapter 诊断工具：scripts/check-adapters.js，输入当前 tab 输出各字段抓取状态
-Constraints:
-
-llm每实现一个功能必须要到这边注册
 
 
 
