@@ -13,76 +13,178 @@ const ExercismAdapter = {
     },
 
     async testAndSubmit(tabId) {
-        const result = await executePage(tabId, () => {
-            const buttons = [...document.querySelectorAll("button")]
-                .filter(button =>
-                    button.offsetWidth > 0 &&
-                    button.offsetHeight > 0 &&
-                    !button.disabled
-                );
-            const textOf = button => button.innerText.trim().toLowerCase();
-            const testButton = buttons.find(button =>
-                /run tests?|test/.test(textOf(button))
-            );
+        // Page functions passed to executePage must stay self-contained.
+        // Use Exercism's own footer hooks:
+        //   ".lhs-footer .run-tests-btn button" -> Run Tests
+        //   ".lhs-footer .submit-btn button"    -> Submit
+        // Matching buttons by text is not reliable: the tab bar also contains
+        // "Tests" and a second "Submit" lives in the results panel, and
+        // filtering out disabled buttons made /test/ match the "Tests" tab,
+        // which silently swallowed the Ctrl+Enter action.
+        const readState = () => executePage(tabId, () => {
+            const runTests = document.querySelector(".lhs-footer .run-tests-btn button");
+            const submit = document.querySelector(".lhs-footer .submit-btn button");
+            const visible = element =>
+                !!element && element.offsetWidth > 0 && element.offsetHeight > 0;
+            const statuses = [...document.querySelectorAll('[role="status"]')];
 
-            if (!testButton) {
-                return { ok: false, reason: "Exercism test button not found." };
-            }
-
-            testButton.click();
-            return { ok: true };
+            return {
+                editor: visible(runTests) && visible(submit),
+                runTestsDisabled: !runTests || runTests.disabled,
+                submitDisabled: !submit || submit.disabled,
+                running: statuses.some(element =>
+                    element.classList.contains("running") ||
+                    /running tests/i.test(element.innerText || "")
+                ),
+                failed: /test failures?|tests failed|timed out/i.test(
+                    statuses.map(element => element.innerText || "").join("\n")
+                )
+            };
         });
 
-        if (!result?.ok) {
-            throw new Error(result?.reason || "Could not start Exercism tests.");
+        const fail = async reason => {
+            // Reveal the results panel so a failed run is visible, not silent.
+            try {
+                await executePage(tabId, () => {
+                    const tab = [...document.querySelectorAll(".tabs .c-tab")]
+                        .find(candidate => /results/i.test(candidate.innerText || ""));
+
+                    if (tab) {
+                        tab.click();
+                    }
+                });
+            } catch (_) {
+                // Best effort only; the original reason below matters more.
+            }
+
+            throw new Error(reason);
+        };
+
+        const state = await readState();
+
+        if (!state?.editor) {
+            throw new Error("Exercism editor footer not found.");
         }
 
-        const continueStart = performance.now();
-        while (performance.now() - continueStart < 5000) {
-            const continued = await executePage(tabId, () => {
-                const button = [...document.querySelectorAll("button")]
-                    .find(candidate =>
-                        candidate.offsetWidth > 0 &&
-                        candidate.offsetHeight > 0 &&
-                        !candidate.disabled &&
-                        /continue without waiting/.test(
-                            candidate.innerText.trim().toLowerCase()
-                        )
-                    );
+        // No new files to test and the last run did not pass: Submit cannot
+        // become enabled without editing the solution first.
+        if (state.runTestsDisabled && state.submitDisabled && !state.running) {
+            await fail(
+                "Exercism has no changes to test and the last run did not pass; " +
+                "Submit stays disabled."
+            );
+        }
 
-                if (!button) {
+        // Run Tests is disabled while a run is in flight, and when the files
+        // already match the last submission (nothing new to test). Only click
+        // it when it is actually actionable.
+        if (!state.runTestsDisabled) {
+            await executePage(tabId, () => {
+                const button = document.querySelector(".lhs-footer .run-tests-btn button");
+
+                if (!button || button.disabled) {
                     return false;
                 }
 
                 button.click();
                 return true;
             });
+        }
 
-            if (continued) break;
-            await sleep(100);
+        // Submit stays disabled until the newest run passed for exactly the
+        // current files (Exercism: isSubmitDisabled = testRunStatus !== PASS ||
+        // !filesEqual(...)). Wait for that state instead of a fixed delay,
+        // which used to expire before a normal run (~7s) had finished.
+        const waitStarted = performance.now();
+        const waitDeadline = waitStarted + 60000;
+        let sawRunning = false;
+
+        while (performance.now() < waitDeadline) {
+            const current = await readState();
+
+            if (!current?.editor) {
+                throw new Error(
+                    "Exercism editor footer disappeared while waiting for tests."
+                );
+            }
+
+            if (!current.submitDisabled) {
+                break;
+            }
+
+            if (current.running) {
+                sawRunning = true;
+            } else if (sawRunning && current.failed) {
+                await fail("Exercism tests failed, so Submit stays disabled.");
+            } else if (!sawRunning && performance.now() - waitStarted > 15000) {
+                await fail("Exercism test run did not start; Submit stays disabled.");
+            }
+
+            await sleep(250);
+        }
+
+        if ((await readState()).submitDisabled) {
+            await fail("Exercism tests did not pass in time; Submit stays disabled.");
         }
 
         const submitted = await executePage(tabId, () => {
-            const buttons = [...document.querySelectorAll("button")]
-                .filter(button =>
-                    button.offsetWidth > 0 &&
-                    button.offsetHeight > 0 &&
-                    !button.disabled
-                );
-            const submitButton = buttons.find(button =>
-                /submit/.test(button.innerText.trim().toLowerCase())
-            );
+            const button = document.querySelector(".lhs-footer .submit-btn button");
 
-            if (!submitButton) {
+            if (!button) {
                 return { ok: false, reason: "Exercism submit button not found." };
             }
 
-            submitButton.click();
+            if (button.disabled) {
+                return {
+                    ok: false,
+                    reason: "Exercism submit button is disabled; tests must pass first."
+                };
+            }
+
+            button.click();
             return { ok: true };
         });
 
         if (!submitted?.ok) {
             throw new Error(submitted?.reason || "Could not submit Exercism solution.");
+        }
+
+        // Submitting opens Exercism's "checking for automated feedback" modal,
+        // which holds the redirect until "Continue without waiting" is clicked.
+        // Once the editor footer is gone the redirect already happened.
+        const modalDeadline = performance.now() + 10000;
+
+        try {
+            while (performance.now() < modalDeadline) {
+                const modal = await executePage(tabId, () => {
+                    const button = [...document.querySelectorAll("button")]
+                        .find(candidate =>
+                            candidate.offsetWidth > 0 &&
+                            candidate.offsetHeight > 0 &&
+                            /continue without waiting/i.test(candidate.innerText || "")
+                        );
+
+                    if (!button) {
+                        return {
+                            dismissed: false,
+                            leftEditor: !document.querySelector(
+                                ".lhs-footer .submit-btn button"
+                            )
+                        };
+                    }
+
+                    button.click();
+                    return { dismissed: true, leftEditor: false };
+                });
+
+                if (!modal || modal.dismissed || modal.leftEditor) {
+                    break;
+                }
+
+                await sleep(250);
+            }
+        } catch (_) {
+            // The page may already have navigated; nothing left to dismiss.
         }
 
     },

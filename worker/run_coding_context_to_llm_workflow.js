@@ -104,6 +104,8 @@ async function runExercismTestSubmit() {
     await platform.testAndSubmit(currentTab.id);
 }
 
+// Dormant while manifest.json sets action.default_popup (a popup swallows the
+// icon click). Kept so removing the popup restores click-to-send unchanged.
 chrome.action.onClicked.addListener(async () => {
     try {
         await runWorkflow();
@@ -122,7 +124,22 @@ chrome.commands.onCommand.addListener(async command => {
     }
 });
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "run-workflow") {
+        // The popup owns the send button, so it needs the outcome back.
+        runWorkflow()
+            .then(() => sendResponse({ ok: true }))
+            .catch(error => {
+                console.error("[workflow] ERROR:", error);
+                sendResponse({
+                    ok: false,
+                    error: String(error?.message || error)
+                });
+            });
+
+        return true;
+    }
+
     if (message?.type === "exercism-test-submit") {
         runExercismTestSubmit().catch(error => {
             console.error("[exercism] test and submit ERROR:", error);

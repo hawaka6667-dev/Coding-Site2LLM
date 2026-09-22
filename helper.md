@@ -7,10 +7,13 @@
 - 人：快速恢复项目上下文，知道下一步应该改哪里、测什么。
 - LLM：快速恢复技术状态，知道哪些行为是契约，哪些只是实现细节。
 
+
+## 0. 开发者的话（其他开发者可以改这里）
+我是一边刷题一边开着vs搞开发，所以默认要打开dev tool mcp，以及提醒我点击浏览器确认，改完功能后要自动reload一下扩展
+
+因为我就在刷题，可以当场测试，所以开发时只需考虑快速开发就行
+
 ## 1. 项目定位
-
-
-我是一边刷题一边调试开发，所以默认要打开dev tool mcp，以及提醒我点击浏览器确认
 
 Coding Site2LLM 是一个 Chrome 扩展。它从在线编程网站的当前题目页读取已有上下文，组装成提示词，并将提示词插入用户已经打开的 LLM 页面。
 
@@ -42,6 +45,8 @@ URL 路由：选择站点 adapter
 | `worker/inject_scripts_and_control_coding_page.js` | 向编程页面注入脚本并控制页面动作 |
 | `worker/route_coding_page_and_build_llm_prompt.js` | URL 路由、上下文路由和 prompt 组装 |
 | `worker/run_coding_context_to_llm_workflow.js` | 串联从编程页面到 LLM 页面的一次完整传输 |
+| `worker/open_new_exercism_exercise_in_editor.js` | Exercism overview 页 content script：新题目直接进入编辑页，并声明它自己的开关 |
+| `popup/popup.html` / `popup/popup.js` | 扩展 popup：Exercism 开关 + 发送上下文按钮 |
 | `tests/minimal-core-feature.test.js` | prompt、上下文诊断和反馈清理的最小功能测试 |
 | `tests/local-routing.test.js` | URL 和 adapter 路由的局部测试 |
 | `tests/global-extension-contract.test.js` | manifest、content script、扩展 wiring 和图标的全局维护测试 |
@@ -67,8 +72,26 @@ Exercism 的编辑页和 overview 页是两个不同的路由状态，不能混�
 扩展提供的辅助行为：
 
 - 在编辑页拦截 `Ctrl+Enter`，避免编辑器把它解释成普通换行或其他快捷键。
-- 按页面实际状态执行 Run Tests、Continue without waiting、Submit 等动作。
+- 按页面实际状态执行：`Run Tests`（仅当按钮可用）→ 等待 `Submit` 变为可用 → `Submit`。
+- 页脚是稳定锚点：`.lhs-footer .run-tests-btn button` / `.lhs-footer .submit-btn button`。不要按文字匹配按钮，tab 栏里也有 `Tests`，结果面板里还有第二个 `Submit`。
+- `Submit` 的可用条件是「最近一次 run 通过」且「当前文件与该次提交一致」，所以提交前必须等它变为可用，不能用固定延时。
+- `Continue without waiting` 属于**提交之后**的 automated feedback 弹窗，不是编辑页 run 流程的一部分。
 - 提交成功后，可按页面确认链执行 mark as complete。
+
+overview 页还有一条独立行为：题目仍是 `available`（从未开始）时，默认直接进入 `<exercise>/edit`。
+
+- 判断依据只能是 `[data-react-id="student-open-editor-button"]` 的 `data-react-data.status`。已开始的题目页上，CTA 按钮文字**仍然**是 `Start in editor`，`.action-box.pending` 也仍然存在，所以按钮文字和 action-box class 都不能用来区分。
+- 真实 status：`available`（跳转）→ `started` → `iterated`（已提交未完成）→ `completed`；除 `available` 外一律留在 overview 页。
+- 打开 `/edit` 会把题目置为 `started`，不会弹回 overview，所以跳转是单向的。每个 tab 每个题目只跳一次（sessionStorage 守卫），避免极端情况下死循环，同时保留 Back 回 overview 的能力。
+- Exercism 用 Turbo 做站内跳转，content script 不会重新注入，所以这里同时监听 `turbo:load` / `turbo:render` 和 DOM 变化。
+
+## 5.1 扩展面板与开关
+
+点击扩展图标打开 popup（`action.default_popup`），里面是「发送上下文」按钮和 Exercism 跳转开关。开关默认开启，键名 `exercismOpenNewExerciseInEditor`，声明在 `worker/open_new_exercism_exercise_in_editor.js`，由 `popup/popup.js` 写入 `chrome.storage.local`。
+
+- 该开关是**临时性质**：用来决定正式版是否保留这个跳转行为，删掉时只需移除判断和 popup 里对应控件。
+- 设置变化通过 `chrome.storage.onChanged` 即时生效，不必刷新已打开的页面。
+- 注意 side effect：`default_popup` 会接管图标点击，`chrome.action.onClicked` 不再触发。因此发送上下文改由 popup 按钮或 `Alt+Q` 触发；`chrome.action.onClicked` 监听器保留但处于休眠状态，删掉 popup 即可恢复原来的单击发送。
 
 这些行为属于扩展自己的自动化；页面结构变化时，应通过真实页面重新验证，不应假设 Exercism 提供稳定的内部 API。
 
@@ -114,6 +137,7 @@ npm run smoke     # [deprecated] 旧 HTTP remote-debugging 页面探测
 - prompt 中题目、代码、语言和有效反馈的保留。
 - LeetCode editorial、性能排名等无关文本的过滤。
 - Exercism 的 content script、提交辅助和 mark-complete 确认链。
+- Exercism 新题目 overview → `/edit` 的跳转判定：只认 `available`，并且每个 tab 每个题目只跳一次。
 
 站点 selector、编辑器实现或 SPA 路由变化时，用 Chrome DevTools MCP 重新探测真实页面。旧 smoke test 仅保留兼容性；完整扩展 workflow 由单元和契约测试覆盖。
 
@@ -123,7 +147,8 @@ npm run smoke     # [deprecated] 旧 HTTP remote-debugging 页面探测
 2. 先运行职责对应的最小测试：核心功能用 `test:unit`，路由用 `test:routing`，扩展能力用 `test:contracts`，移动文件或配置用 `test:setup`。
 3. 使用 Chrome DevTools MCP 在真实页面运行探针，确认页面 DOM、编辑器和测试反馈。
 4. 使用 Chrome DevTools MCP 的官方 `reload_extension` 刷新未打包扩展。
-5. 在编程页面和目标 LLM 页面各验证一次端到端传输。
+5. 刷新编程页面：reload 扩展后旧页面里的 content script runtime 已失效，`Ctrl+Enter` 会静默失败；刷新后 content script 才是新版本。
+6. 在编程页面和目标 LLM 页面各验证一次端到端传输。
 
 `tests/deprecated/browser-smoke.test.js` 和 `npm run smoke` 保留用于兼容旧的
 HTTP remote-debugging 流程，现已 deprecated；不要把它作为默认页面验证入口。

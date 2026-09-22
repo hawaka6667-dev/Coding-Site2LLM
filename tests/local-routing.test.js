@@ -1,5 +1,6 @@
 /*
- * Local routing tests for supported coding sites and LLM providers.
+ * Local routing tests for supported coding sites and LLM providers, plus the
+ * Exercism overview -> editor redirect decision.
  * Use this suite for a local routing change, without global maintenance checks.
  */
 
@@ -81,4 +82,140 @@ test("recognizes valid LLM provider URLs only", () => {
     );
 
     assert.equal(result, true);
+});
+
+function loadExercismOverviewScript() {
+    const chrome = {
+        storage: {
+            local: { get: async () => ({}), set: async () => {} },
+            onChanged: { addListener: () => {} }
+        }
+    };
+    const document = {
+        documentElement: null,
+        addEventListener: () => {},
+        querySelector: () => null
+    };
+    const sessionStorage = {
+        entries: new Map(),
+        getItem(key) {
+            return this.entries.has(key) ? this.entries.get(key) : null;
+        },
+        setItem(key, value) {
+            this.entries.set(key, String(value));
+        }
+    };
+    const context = vm.createContext({
+        chrome,
+        console,
+        document,
+        sessionStorage,
+        location: { href: "", assign: () => {} }
+    });
+
+    for (const file of [
+        "worker/open_new_exercism_exercise_in_editor.js"
+    ]) {
+        vm.runInContext(
+            fs.readFileSync(path.join(ROOT_DIR, file), "utf8"),
+            context,
+            { filename: file }
+        );
+    }
+
+    return context;
+}
+
+test("opens the editor only for an Exercism exercise that is still available", () => {
+    const context = loadExercismOverviewScript();
+    const target = (url, state) => vm.runInContext(
+        `resolveExercismExerciseEditorRedirectTarget(${JSON.stringify(url)}, ${JSON.stringify(state)})`,
+        context
+    );
+    const overview = "https://exercism.org/tracks/rust/exercises/anagram";
+
+    assert.equal(
+        target(overview, { status: "available", editorEnabled: true }),
+        "https://exercism.org/tracks/rust/exercises/anagram/edit"
+    );
+    assert.equal(
+        target(overview + "?foo=1", { status: "available", editorEnabled: true }),
+        "https://exercism.org/tracks/rust/exercises/anagram/edit"
+    );
+    assert.equal(
+        target(overview + "/", { status: "available", editorEnabled: true }),
+        "https://exercism.org/tracks/rust/exercises/anagram/edit"
+    );
+
+    // A started exercise keeps its overview page: Exercism still renders a
+    // "Start in editor" button there, so only the status may decide.
+    assert.equal(
+        target("https://exercism.org/tracks/rust/exercises/gigasecond", {
+            status: "started",
+            editorEnabled: true
+        }),
+        ""
+    );
+    assert.equal(target(overview, { status: "completed", editorEnabled: true }), "");
+    assert.equal(target(overview, { status: "available", editorEnabled: false }), "");
+    assert.equal(target(overview, null), "");
+
+    // Editor pages and other sites are never redirected.
+    assert.equal(
+        target(overview + "/edit", { status: "available", editorEnabled: true }),
+        ""
+    );
+    assert.equal(
+        target("https://leetcode.com/problems/two-sum/", {
+            status: "available",
+            editorEnabled: true
+        }),
+        ""
+    );
+});
+
+test("reads the exercise status from React data and rejects unusable payloads", () => {
+    const context = loadExercismOverviewScript();
+    const parse = raw => vm.runInContext(
+        `parseExercismOpenEditorButtonData(${JSON.stringify(raw)})`,
+        context
+    );
+
+    assert.equal(
+        JSON.stringify(parse('{"status":"available","editor_enabled":true}')),
+        JSON.stringify({ status: "available", editorEnabled: true })
+    );
+    assert.equal(
+        JSON.stringify(parse(
+            '{&quot;status&quot;:&quot;started&quot;,&quot;editor_enabled&quot;:true}'
+        )),
+        JSON.stringify({ status: "started", editorEnabled: true })
+    );
+    assert.equal(parse(""), null);
+    assert.equal(parse("not json"), null);
+    assert.equal(parse('{"command":"exercism download"}'), null);
+});
+
+test("remembers a redirect so one exercise cannot loop in a tab session", () => {
+    const context = loadExercismOverviewScript();
+    const path = "/tracks/rust/exercises/anagram/edit";
+
+    assert.equal(
+        vm.runInContext(`editorRedirectAlreadyIssued("${path}")`, context),
+        false
+    );
+
+    vm.runInContext(`rememberEditorRedirect("${path}")`, context);
+
+    assert.equal(
+        vm.runInContext(`editorRedirectAlreadyIssued("${path}")`, context),
+        true
+    );
+    assert.equal(
+        vm.runInContext(
+            'editorRedirectAlreadyIssued("/tracks/rust/exercises/clock/edit")',
+            context
+        ),
+        false
+    );
 });

@@ -17,7 +17,10 @@ test("has the expected development entry points and scripts", () => {
     for (const file of [
         "background.js",
         "content.js",
+        "popup/popup.html",
+        "popup/popup.js",
         "worker/configure_supported_coding_sites_and_llm_providers.js",
+        "worker/open_new_exercism_exercise_in_editor.js",
         "worker/auto_mark_exercism_complete.js"
     ]) {
         assert.equal(fs.existsSync(path.join(ROOT_DIR, file)), true, file);

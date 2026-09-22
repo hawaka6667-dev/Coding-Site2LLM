@@ -21,9 +21,41 @@ test("keeps extension commands and content scripts registered", () => {
     assert.deepEqual(manifest.content_scripts[0].js, ["content.js"]);
     assert.deepEqual(
         manifest.content_scripts[1].js,
-        ["worker/auto_mark_exercism_complete.js"]
+        [
+            "worker/open_new_exercism_exercise_in_editor.js",
+            "worker/auto_mark_exercism_complete.js"
+        ]
     );
     assert.equal(manifest.commands["exercism-test-submit"], undefined);
+});
+
+test("keeps the popup toggle wired to the Exercism redirect setting", () => {
+    const manifest = readManifest();
+    const popupPath = manifest.action.default_popup;
+    const popupHtml = fs.readFileSync(path.join(ROOT_DIR, popupPath), "utf8");
+    const popupSource = fs.readFileSync(
+        path.join(ROOT_DIR, path.dirname(popupPath), "popup.js"),
+        "utf8"
+    );
+    const redirectSource = fs.readFileSync(
+        path.join(ROOT_DIR, "worker", "open_new_exercism_exercise_in_editor.js"),
+        "utf8"
+    );
+
+    assert.equal(manifest.permissions.includes("storage"), true);
+    // The popup lives in its own folder instead of flattening the project root.
+    assert.equal(popupPath, "popup/popup.html");
+    assert.match(popupHtml, /<script src="popup\.js">/);
+
+    // The setting is declared next to the behaviour it controls; the popup must
+    // read and write that exact key.
+    const keyLiteral = /"exercismOpenNewExerciseInEditor"/;
+    assert.match(redirectSource, keyLiteral);
+    assert.match(popupSource, keyLiteral);
+    assert.match(
+        redirectSource,
+        /EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_DEFAULT = true/
+    );
 });
 
 test("keeps mark-complete separate from Ctrl+Enter submission", () => {

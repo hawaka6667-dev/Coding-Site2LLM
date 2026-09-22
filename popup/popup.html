@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        :root {
+            color-scheme: light dark;
+            --text: #1b1d21;
+            --muted: #5c626b;
+            --border: #d9dce1;
+            --button: #3a6df0;
+            --button-text: #ffffff;
+            --hover: #2f5cd8;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text: #eceef1;
+                --muted: #9aa1ab;
+                --border: #34383e;
+                --button: #3a6df0;
+                --hover: #4d7bf5;
+            }
+        }
+
+        body {
+            width: 300px;
+            margin: 0;
+            padding: 14px;
+            color: var(--text);
+            font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: 14px;
+        }
+
+        #send-context {
+            width: 100%;
+            padding: 8px 10px;
+            border: 0;
+            border-radius: 6px;
+            background: var(--button);
+            color: var(--button-text);
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #send-context:hover {
+            background: var(--hover);
+        }
+
+        #send-context[disabled] {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        #status {
+            min-height: 16px;
+            margin: 8px 0 0;
+            color: var(--muted);
+        }
+
+        hr {
+            margin: 14px 0;
+            border: 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .setting {
+            display: flex;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .setting input {
+            width: 16px;
+            height: 16px;
+            margin: 1px 0 0;
+            flex: none;
+            accent-color: var(--button);
+        }
+
+        .detail {
+            margin: 6px 0 0 24px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Coding Site2LLM</h1>
+
+    <button id="send-context" type="button">Send context to LLM (Alt+Q)</button>
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <hr>
+
+    <label class="setting" for="exercism-open-new-exercise-in-editor">
+        <input type="checkbox" id="exercism-open-new-exercise-in-editor">
+        <span>Open new Exercism exercises in the editor</span>
+    </label>
+    <p class="detail">
+        An overview page whose exercise is still available goes straight to
+        <code>&lt;exercise&gt;/edit</code>. Started exercises keep their overview page.
+    </p>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
