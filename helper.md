@@ -9,9 +9,10 @@
 
 
 ## 0. 开发者的话（其他开发者可以改这里）
-我是一边刷题一边开着vs搞开发，所以默认要打开dev tool mcp，以及提醒我点击浏览器确认，改完功能后要自动reload一下扩展
+我是一边刷题一边开着vs搞开发，所以默认要打开chrome-dev-tool mcp（这个有问题退出简报），以及显式提醒我点击浏览器确认，改完功能默认reload一下扩展
 
-因为我就在刷题，可以当场测试，所以开发时只需考虑快速开发就行
+因为我就在刷题，当场测试很便利，而且可能页面上就留有测试素材，因此开发时只需考虑快速实现就行
+要么利用我的页面，要么ctrl n自己搞一个然后用完关闭
 
 ## 1. 项目定位
 
@@ -38,14 +39,21 @@ URL 路由：选择站点 adapter
 过滤并组装 prompt
    ↓
 
+LLM 页面：等待用户操作
+   ├─ 未发生复制：Alt+Q 直接回到原 code Tab
+   └─ 发生过复制：Alt+Q 回到原 code Tab，回填复制文本并触发 Ctrl+Enter
+```
+
 | 文件 | 职责 |
 | --- | --- |
 | `worker/extract_coding_site_context_with_site_adapters.js` | 站点 adapter、页面上下文提取、prompt 清理和 Exercism 页面自动化 |
 | `worker/find_llm_tab_and_insert_prompt.js` | 查找目标 LLM Tab 并插入 prompt |
 | `worker/inject_scripts_and_control_coding_page.js` | 向编程页面注入脚本并控制页面动作 |
 | `worker/route_coding_page_and_build_llm_prompt.js` | URL 路由、上下文路由和 prompt 组装 |
-| `worker/run_coding_context_to_llm_workflow.js` | 串联从编程页面到 LLM 页面的一次完整传输 |
-| `worker/open_new_exercism_exercise_in_editor.js` | Exercism overview 页 content script：新题目直接进入编辑页，并声明它自己的开关 |
+| `worker/run_coding_context_to_llm_workflow.js` | 串联从编程页面到 LLM 页面的完整传输，并读取用户选择的 provider |
+| `worker/llm_copy_tracker.js` | 监听 LLM 页面真实 copy 事件并通知 service worker |
+| `worker/exercism_overview_content_scripts/open_exercise_in_editor.js` | Exercism overview 页 content script：判定是否直接进入编辑页，并声明它自己的开关 |
+| `worker/exercism_overview_content_scripts/auto_mark_exercise_complete.js` | Exercism overview 页 content script：出现 `Mark as complete` 时请求 service worker 走确认链 |
 | `popup/popup.html` / `popup/popup.js` | 扩展 popup：Exercism 开关 + 发送上下文按钮 |
 | `tests/minimal-core-feature.test.js` | prompt、上下文诊断和反馈清理的最小功能测试 |
 | `tests/local-routing.test.js` | URL 和 adapter 路由的局部测试 |
@@ -78,20 +86,33 @@ Exercism 的编辑页和 overview 页是两个不同的路由状态，不能混�
 - `Continue without waiting` 属于**提交之后**的 automated feedback 弹窗，不是编辑页 run 流程的一部分。
 - 提交成功后，可按页面确认链执行 mark as complete。
 
-overview 页还有一条独立行为：题目仍是 `available`（从未开始）时，默认直接进入 `<exercise>/edit`。
+overview 页还有一条独立行为：题目**还有事可做**时，默认直接进入 `<exercise>/edit`。判定顺序就是契约：
 
-- 判断依据只能是 `[data-react-id="student-open-editor-button"]` 的 `data-react-data.status`。已开始的题目页上，CTA 按钮文字**仍然**是 `Start in editor`，`.action-box.pending` 也仍然存在，所以按钮文字和 action-box class 都不能用来区分。
-- 真实 status：`available`（跳转）→ `started` → `iterated`（已提交未完成）→ `completed`；除 `available` 外一律留在 overview 页。
+| overview 状态 | 行为 |
+| --- | --- |
+| `available`（从未开始） | 进 `<exercise>/edit` |
+| in progress，页面上没有可用的 `Mark as complete` | 进 `<exercise>/edit` |
+| in progress，页面上有可用的 `Mark as complete` | 留在 overview，交给 mark-complete 确认链 |
+| 其它（`completed`、无法判定） | 留在 overview |
+
+- `available` 的判断依据只能是 `[data-react-id="student-open-editor-button"]` 的 `data-react-data.status`。已开始的题目页上，CTA 按钮文字**仍然**是 `Start in editor`，`.action-box.pending` 也仍然存在，所以按钮文字和 action-box class 都不能用来区分。
+- in progress 有两个信号：`data-react-data.status` ∈ {`started`, `iterated`, `in_progress`}，或页面上的小 status 容器出现 `In progress` 文案。后者只扫 `[class*="status"|"badge"|"pill"|"tag"]` 里可见且文本长度 ≤ 40 的节点，避免题目说明和 track 侧栏误匹配。
+- `Mark as complete` 只在提交之后出现，所以它区分的是「overview 上已无事可做」和「正在等确认」。它出现过一次就会被记住，避免点击瞬间按钮消失或变灰导致页面被跳走。
+- 真实 status：`available` → `started` → `iterated`（已提交未完成）→ `completed`；`completed` 是终态，永远留在 overview。
 - 打开 `/edit` 会把题目置为 `started`，不会弹回 overview，所以跳转是单向的。每个 tab 每个题目只跳一次（sessionStorage 守卫），避免极端情况下死循环，同时保留 Back 回 overview 的能力。
 - Exercism 用 Turbo 做站内跳转，content script 不会重新注入，所以这里同时监听 `turbo:load` / `turbo:render` 和 DOM 变化。
 
+overview 专属脚本集中在 `worker/exercism_overview_content_scripts/`：只跑 overview 页（manifest 用 `exclude_matches` 排除 `/edit`，编辑页由根目录的 `content.js` 负责）。两个文件互不依赖：`open_exercise_in_editor.js` 决定去不去编辑页，`auto_mark_exercise_complete.js` 只负责在 `Mark as complete` 出现时请求确认链；`Mark as complete` 的匹配条件两边各写一份，避免隐式的加载顺序依赖。
+
 ## 5.1 扩展面板与开关
 
-点击扩展图标打开 popup（`action.default_popup`），里面是「发送上下文」按钮和 Exercism 跳转开关。开关默认开启，键名 `exercismOpenNewExerciseInEditor`，声明在 `worker/open_new_exercism_exercise_in_editor.js`，由 `popup/popup.js` 写入 `chrome.storage.local`。
+点击扩展图标打开 popup（`action.default_popup`），里面是「发送上下文」按钮和 Exercism 跳转开关。开关默认开启，键名 `exercismOpenNewExerciseInEditor`，声明在 `worker/exercism_overview_content_scripts/open_exercise_in_editor.js`，由 `popup/popup.js` 写入 `chrome.storage.local`。
 
 - 该开关是**临时性质**：用来决定正式版是否保留这个跳转行为，删掉时只需移除判断和 popup 里对应控件。
 - 设置变化通过 `chrome.storage.onChanged` 即时生效，不必刷新已打开的页面。
 - 注意 side effect：`default_popup` 会接管图标点击，`chrome.action.onClicked` 不再触发。因此发送上下文改由 popup 按钮或 `Alt+Q` 触发；`chrome.action.onClicked` 监听器保留但处于休眠状态，删掉 popup 即可恢复原来的单击发送。
+- popup 的 `LLM provider` 下拉框使用 `selectedLlmProvider` 保存选择，默认值是 `DeepSeek`。发送上下文时只查找所选 provider 的已有标签页；找不到时在当前窗口创建该 provider 的标签页，不会因为附近存在其它 LLM 标签页而改用其它 provider。
+- 从 code 页用 `Alt+Q` 成功发送后，扩展记录来源 code Tab 和目标 LLM Tab。LLM 页再次按 `Alt+Q` 总是回到来源 Tab：如果本次 LLM 页面没有发生过 `copy` 事件，只回跳、不修改代码；如果发生过复制，则回填复制文本并触发 `Ctrl+Enter`。不能用剪贴板当前是否非空代替 copy 事件，因为那可能是之前遗留的内容。
 
 这些行为属于扩展自己的自动化；页面结构变化时，应通过真实页面重新验证，不应假设 Exercism 提供稳定的内部 API。
 
@@ -137,7 +158,7 @@ npm run smoke     # [deprecated] 旧 HTTP remote-debugging 页面探测
 - prompt 中题目、代码、语言和有效反馈的保留。
 - LeetCode editorial、性能排名等无关文本的过滤。
 - Exercism 的 content script、提交辅助和 mark-complete 确认链。
-- Exercism 新题目 overview → `/edit` 的跳转判定：只认 `available`，并且每个 tab 每个题目只跳一次。
+- Exercism overview → `/edit` 的跳转判定表（`available`、以及 in progress 但没有可用的 `Mark as complete` 时跳转；有 `Mark as complete` 和 `completed` 留在 overview），并且每个 tab 每个题目只跳一次。
 
 站点 selector、编辑器实现或 SPA 路由变化时，用 Chrome DevTools MCP 重新探测真实页面。旧 smoke test 仅保留兼容性；完整扩展 workflow 由单元和契约测试覆盖。
 
@@ -156,6 +177,28 @@ HTTP remote-debugging 流程，现已 deprecated；不要把它作为默认页�
 当前未打包扩展 ID：`loccbnegdbnncgomcaemokbffafjijpj`。
 
 `reload_extension` 通过 CDP 的 Target 能力刷新扩展，不依赖自制的 HTTP `/json` 调试循环。项目不保留旧的 `dev-loop.js` 方案。
+
+## 8.1 how to图标快速制作
+
+图标改动按“一个 SVG 源稿 → 批量导出 PNG”的流程做，不要为每个尺寸单独画一遍，也不要把完整预览页截图当成图标文件。
+
+1. 先改一个 `viewBox="0 0 128 128"` 的 SVG 源稿，确保 128px 和 16px 预览都能辨认。
+2. 只保留必要的颜色和粗线条；Chrome 工具栏 16px 下，细描边、文字和复杂渐变都会消失。
+3. 用本机 SVG 转 PNG 工具一次生成 `icons/icon16.png`、`icon32.png`、`icon48.png`、`icon128.png`。优先使用已有的 `magick` / `sharp` / 设计工具导出，不要逐个浏览器截图。
+4. 如果只能用 Chrome 截图，必须截取 SVG 元素本身，不要截整页；Chrome 的设备像素比可能是 `1.25`，导出后要统一缩放到精确的 `16x16`、`32x32`、`48x48`、`128x128`。
+5. 用下面的命令快速检查尺寸，再运行对应的最小测试：
+
+```powershell
+Add-Type -AssemblyName System.Drawing
+Get-ChildItem .\icons\icon*.png | ForEach-Object {
+   $image = [System.Drawing.Image]::FromFile($_.FullName)
+   try { "$($_.Name): $($image.Width)x$($image.Height)" }
+   finally { $image.Dispose() }
+}
+npm run test:contracts
+```
+
+`manifest.json` 已固定使用这四个 PNG 路径，通常不需要改 manifest。完成后用 Chrome DevTools MCP 的 `reload_extension` 刷新扩展，再刷新当前页面；图标缓存不更新时关闭并重新打开扩展管理页。
 
 ## 9. 当前边界与后续方向
 
