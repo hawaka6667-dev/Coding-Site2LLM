@@ -17,6 +17,7 @@ const LLM_HOSTS = new Set([
     "gemini.google.com",
     "deepai.org"
 ]);
+let shortcutHeld = false;
 
 function shortcutMatches(event, shortcut) {
     if (!shortcut) {
@@ -30,17 +31,21 @@ function shortcutMatches(event, shortcut) {
     }
     const key = parts.join("+");
 
-    const eventKey = /^Key[A-Z]$/.test(event.code)
-        ? event.code.slice(3)
-        : /^Digit[0-9]$/.test(event.code)
-            ? event.code.slice(5)
-            : event.key;
+    const eventKey = getEventKey(event);
 
     return eventKey.toUpperCase() === key.toUpperCase()
         && event.ctrlKey === modifiers.has("Ctrl")
         && event.altKey === modifiers.has("Alt")
         && event.shiftKey === modifiers.has("Shift")
         && event.metaKey === modifiers.has("Meta");
+}
+
+function getEventKey(event) {
+    return /^Key[A-Z]$/.test(event.code)
+        ? event.code.slice(3)
+        : /^Digit[0-9]$/.test(event.code)
+            ? event.code.slice(5)
+            : event.key;
 }
 
 async function getShortcuts() {
@@ -56,6 +61,10 @@ async function getShortcuts() {
 }
 
 document.addEventListener("keydown", event => {
+    if (event.repeat || shortcutHeld) {
+        return;
+    }
+
     getShortcuts().then(shortcuts => {
         const commandName = LLM_HOSTS.has(location.hostname)
             ? "smart-return"
@@ -67,10 +76,31 @@ document.addEventListener("keydown", event => {
             return;
         }
 
+        shortcutHeld = true;
         event.preventDefault();
         event.stopPropagation();
         chrome.runtime.sendMessage({ type: "keyboard-shortcut", command });
     }).catch(() => {
         // The extension context may disappear while an existing tab remains open.
+    });
+}, true);
+
+document.addEventListener("keyup", event => {
+    if (!shortcutHeld) {
+        return;
+    }
+
+    getShortcuts().then(shortcuts => {
+        const matchesShortcut = Object.values(shortcuts).some(shortcut => {
+            const key = shortcut?.split("+").at(-1);
+            return key && getEventKey(event).toUpperCase() === key.toUpperCase();
+        });
+
+        if (matchesShortcut) {
+            shortcutHeld = false;
+            chrome.runtime.sendMessage({ type: "keyboard-shortcut-release" });
+        }
+    }).catch(() => {
+        shortcutHeld = false;
     });
 }, true);

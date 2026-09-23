@@ -5,10 +5,14 @@ contract: no website selectors or page-specific extraction
 */
 
 let workflowPromise = null;
-let returnRoute = null;
+let returnRoutes = null;
+let keyboardShortcutHeld = false;
+let keyboardShortcutReleaseTimer = null;
 const exercismSubmitPromises = new Map();
 const RETURN_ROUTE_KEY = "codingSite2LlmReturnRoute";
+const RETURN_ROUTES_KEY = "codingSite2LlmReturnRoutes";
 const SELECTED_LLM_PROVIDER_KEY = "selectedLlmProvider";
+const KEYBOARD_SHORTCUT_LOCK_TIMEOUT_MS = 10000;
 
 async function getSelectedLlmProvider() {
     const stored = await chrome.storage.local.get(SELECTED_LLM_PROVIDER_KEY);
@@ -18,23 +22,83 @@ async function getSelectedLlmProvider() {
 }
 
 async function saveReturnRoute(route) {
-    returnRoute = route;
-    const value = { [RETURN_ROUTE_KEY]: route };
+    const routes = await loadReturnRoutes();
+    const key = getReturnRouteKey(route.windowId, route.llmTabId);
+    routes[key] = route;
+    returnRoutes = routes;
+    const value = { [RETURN_ROUTES_KEY]: routes };
     await chrome.storage?.local?.set?.(value);
     await chrome.storage?.session?.set?.(value);
 }
 
 async function loadReturnRoute() {
-    if (returnRoute) {
-        return returnRoute;
+    const routes = await loadReturnRoutes();
+    const tabs = await chrome.tabs.query({});
+    const activeLlmTab = tabs.find(tab => tab.active && isLlmUrl(tab.url));
+    return activeLlmTab
+        ? routes[getReturnRouteKey(activeLlmTab.windowId, activeLlmTab.id)] || null
+        : null;
+}
+
+function getReturnRouteKey(windowId, llmTabId) {
+    return `${windowId}:${llmTabId}`;
+}
+
+function normalizeReturnRoute(route) {
+    if (!route || typeof route !== "object") {
+        return null;
     }
 
-    const stored = await chrome.storage?.local?.get?.(RETURN_ROUTE_KEY);
-    const sessionStored = await chrome.storage?.session?.get?.(RETURN_ROUTE_KEY);
-    returnRoute = stored?.[RETURN_ROUTE_KEY] ||
-        sessionStored?.[RETURN_ROUTE_KEY] ||
-        null;
-    return returnRoute;
+    let sourcePlatform = route.sourcePlatform;
+
+    if (!sourcePlatform && route.sourceUrl) {
+        try {
+            sourcePlatform = getPlatform(route.sourceUrl).name;
+        } catch (_) {
+            sourcePlatform = "";
+        }
+    }
+
+    return {
+        ...route,
+        sourcePlatform: sourcePlatform || "",
+        status: route.status || (route.sourceTabId ? "routed" : "orphaned")
+    };
+}
+
+async function loadReturnRoutes() {
+    if (returnRoutes) {
+        return returnRoutes;
+    }
+
+    const stored = await chrome.storage?.local?.get?.([
+        RETURN_ROUTES_KEY,
+        RETURN_ROUTE_KEY
+    ]);
+    const sessionStored = await chrome.storage?.session?.get?.([
+        RETURN_ROUTES_KEY,
+        RETURN_ROUTE_KEY
+    ]);
+    const savedRoutes = stored?.[RETURN_ROUTES_KEY] ||
+        sessionStored?.[RETURN_ROUTES_KEY];
+
+    if (savedRoutes && typeof savedRoutes === "object") {
+        returnRoutes = Object.fromEntries(
+            Object.entries(savedRoutes)
+                .map(([key, route]) => [key, normalizeReturnRoute(route)])
+                .filter(([, route]) => route)
+        );
+        return returnRoutes;
+    }
+
+    const legacyRoute = stored?.[RETURN_ROUTE_KEY] ||
+        sessionStored?.[RETURN_ROUTE_KEY];
+    const normalizedLegacyRoute = normalizeReturnRoute(legacyRoute);
+    returnRoutes = normalizedLegacyRoute?.windowId !== undefined &&
+        normalizedLegacyRoute?.llmTabId !== undefined
+        ? { [getReturnRouteKey(normalizedLegacyRoute.windowId, normalizedLegacyRoute.llmTabId)]: normalizedLegacyRoute }
+        : {};
+    return returnRoutes;
 }
 
 function isLlmUrl(url) {
@@ -62,7 +126,11 @@ function isLikelyCode(text) {
 }
 
 async function recordLlmCopy(tabId, text) {
-    const route = await loadReturnRoute();
+    const tabs = await chrome.tabs.query({});
+    const llmTab = tabs.find(tab => tab.id === tabId && isLlmUrl(tab.url));
+    const route = llmTab
+        ? (await loadReturnRoutes())[getReturnRouteKey(llmTab.windowId, tabId)]
+        : null;
 
     if (
         !route ||
@@ -158,7 +226,9 @@ async function submitReturnedCode(tabId) {
 }
 
 async function returnToCodingPage(llmTab) {
-    const route = await loadReturnRoute();
+    const routes = await loadReturnRoutes();
+    const routeKey = getReturnRouteKey(llmTab.windowId, llmTab.id);
+    let route = routes[routeKey];
 
     if (
         !route ||
@@ -168,6 +238,26 @@ async function returnToCodingPage(llmTab) {
         return;
     }
 
+    const tabs = await chrome.tabs.query({ windowId: llmTab.windowId });
+    const sourceTab = tabs.find(tab => tab.id === route.sourceTabId);
+    const sourceIsValid = sourceTab &&
+        isCodingTabForPlatform(sourceTab, route.sourcePlatform);
+    const targetTab = sourceIsValid
+        ? sourceTab
+        : findRightCodingTab(tabs, llmTab, route.sourcePlatform);
+
+    if (!targetTab) {
+        await saveReturnRoute({ ...route, sourceTabId: null, status: "orphaned" });
+        return;
+    }
+
+    route = {
+        ...route,
+        sourceTabId: targetTab.id,
+        status: "routed"
+    };
+    await saveReturnRoute(route);
+
     const clipboardText = await readClipboard(llmTab.id);
     const copiedText = route.copiedText || clipboardText;
     const paste = route.copied
@@ -176,11 +266,11 @@ async function returnToCodingPage(llmTab) {
             ? clipboardText
             : "";
 
-    await chrome.tabs.update(route.sourceTabId, { active: true });
+    await chrome.tabs.update(targetTab.id, { active: true });
 
     if (paste) {
-        await replaceCode(route.sourceTabId, paste);
-        await submitReturnedCode(route.sourceTabId);
+        await replaceCode(targetTab.id, paste);
+        await submitReturnedCode(targetTab.id);
     }
 
     await saveReturnRoute({
@@ -188,6 +278,26 @@ async function returnToCodingPage(llmTab) {
         copied: false,
         copiedText: ""
     });
+}
+
+function isCodingTabForPlatform(tab, sourcePlatform) {
+    if (!tab?.id || !tab.url || sourcePlatform === "Web source") {
+        return false;
+    }
+
+    try {
+        const platform = getPlatform(tab.url);
+        return platform.name === sourcePlatform && platform.name !== "Exercism overview";
+    } catch (_) {
+        return false;
+    }
+}
+
+function findRightCodingTab(tabs, llmTab, sourcePlatform) {
+    return tabs
+        .filter(tab => typeof tab.index === "number" && tab.index > llmTab.index)
+        .filter(tab => isCodingTabForPlatform(tab, sourcePlatform))
+        .sort((left, right) => left.index - right.index)[0] || null;
 }
 
 async function runWorkflow() {
@@ -247,7 +357,12 @@ async function runWorkflowOnce() {
     await saveReturnRoute({
         windowId: currentTab.windowId,
         sourceTabId: currentTab.id,
-        llmTabId: deepSeekTab.id
+        llmTabId: deepSeekTab.id,
+        sourcePlatform: platform.name,
+        sourceUrl: currentTab.url || "",
+        status: "routed",
+        copied: false,
+        copiedText: ""
     });
     mark(`find ${llm.provider.name}`, start);
 
@@ -324,10 +439,65 @@ chrome.action.onClicked.addListener(async () => {
     }
 });
 
+chrome.tabs.onRemoved?.addListener((tabId, removeInfo) => {
+    loadReturnRoutes()
+        .then(async routes => {
+            let changed = false;
+
+            for (const [key, route] of Object.entries(routes)) {
+                if (route.llmTabId === tabId) {
+                    delete routes[key];
+                    changed = true;
+                    continue;
+                }
+
+                if (
+                    route.sourceTabId === tabId &&
+                    route.windowId === removeInfo.windowId
+                ) {
+                    routes[key] = {
+                        ...route,
+                        sourceTabId: null,
+                        status: "orphaned"
+                    };
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                returnRoutes = routes;
+                const value = { [RETURN_ROUTES_KEY]: routes };
+                await chrome.storage?.local?.set?.(value);
+                await chrome.storage?.session?.set?.(value);
+            }
+        })
+        .catch(error => {
+            console.error("[workflow] return route cleanup ERROR:", error);
+        });
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "keyboard-shortcut-release") {
+        keyboardShortcutHeld = false;
+        if (keyboardShortcutReleaseTimer) {
+            clearTimeout(keyboardShortcutReleaseTimer);
+            keyboardShortcutReleaseTimer = null;
+        }
+        return;
+    }
+
     if (message?.type === "keyboard-shortcut") {
         const tab = sender.tab;
         const command = message.command;
+
+        if (keyboardShortcutHeld) {
+            return;
+        }
+        keyboardShortcutHeld = true;
+        keyboardShortcutReleaseTimer = setTimeout(() => {
+            keyboardShortcutHeld = false;
+            keyboardShortcutReleaseTimer = null;
+        }, KEYBOARD_SHORTCUT_LOCK_TIMEOUT_MS);
 
         (async () => {
             if (command === "send-context") {

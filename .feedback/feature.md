@@ -1,25 +1,19 @@
 
-1帮我提交git
+1帮我提交git 我不想又是stage又是summary又是commit又是fetch的。。
 
 2做一下简单cleanup，主要是readability  ❌
 ---
 
 ///////////////////////////////////////////////////////////////////
 
-←自己点击确认调试
-//////////////////////////////////
 
-自动release        ❓
+list pages弹一条通知
+←自己点击确认调试
 
 /网站
-加neet、Codingame、牛客网。。。。。。。。。。。
-
-
-
+加neet、Codingame、牛客网。。。CTF，HackerRank, AtCoder, NeetCode。。。。。。。。
 
 /////////////////////////////////////////////////////////////////
 
-我对这版的快捷键设计不满意
-https://github.com/xuejianxianzun/PixivBatchDownloader
-https://github.com/immersive-translate/immersive-translate
-这两个你可以参考他的设计
+
+algo run

@@ -134,12 +134,32 @@ test("finds the selected provider to the left and opens it to the left otherwise
     );
 });
 
-function loadExercismOverviewScript(documentOverrides = {}) {
+test("finds the nearest same-platform coding tab to the right of the LLM tab", () => {
+    const context = loadWorker();
+    const tabs = [
+        { id: 1, index: 0, url: "https://chat.deepseek.com/" },
+        { id: 2, index: 1, url: "https://leetcode.com/problems/two-sum/" },
+        { id: 3, index: 2, url: "https://exercism.org/tracks/go/exercises/hello-world/edit" },
+        { id: 4, index: 3, url: "https://exercism.org/tracks/go/exercises/anagram/edit" },
+        { id: 5, index: 4, url: "https://example.com/" }
+    ];
+
+    assert.equal(
+        vm.runInContext(
+            "findRightCodingTab(tabs, tabs[0], 'Exercism').id",
+            vm.createContext({ ...context, tabs })
+        ),
+        3
+    );
+});
+
+function loadExercismOverviewScript(documentOverrides = {}, chromeOverrides = {}) {
     const chrome = {
         storage: {
             local: { get: async () => ({}), set: async () => {} },
             onChanged: { addListener: () => {} }
-        }
+        },
+        ...chromeOverrides
     };
     const document = {
         documentElement: null,
@@ -190,7 +210,6 @@ test("opens the editor for a new or unfinished exercise without a mark-complete 
         status: "started",
         editorEnabled: true,
         inProgress: true,
-        markCompleteAvailable: false,
         ...extra
     });
 
@@ -205,13 +224,6 @@ test("opens the editor for a new or unfinished exercise without a mark-complete 
         target("https://exercism.org/tracks/rust/exercises/clock", inProgress({
             status: "iterated"
         })),
-        "https://exercism.org/tracks/rust/exercises/clock/edit"
-    );
-
-    // Started and waiting for a completion confirmation: the mark-complete chain
-    // owns the overview page, so the redirect stays out of its way.
-    assert.equal(
-        target(overview, inProgress({ markCompleteAvailable: true })),
         ""
     );
 
@@ -236,67 +248,55 @@ test("opens the editor for a new or unfinished exercise without a mark-complete 
         target("https://leetcode.com/problems/two-sum/", available),
         ""
     );
+
+    assert.equal(
+        target(overview, {
+            status: "iterated",
+            editorEnabled: true,
+            inProgress: true,
+            solved: true,
+            markCompleteAvailable: false
+        }),
+        ""
+    );
 });
 
-test("reads the status badge, the mark-complete control, and combines them", () => {
+test("reads the overview status badge without owning mark-complete controls", () => {
     const badge = (text, visible = true) => ({
         textContent: text,
         innerText: text,
         offsetWidth: visible ? 40 : 0,
         offsetHeight: visible ? 20 : 0
     });
-    const markCompleteButton = (text, extra = {}) => ({
-        textContent: text,
-        innerText: text,
-        offsetWidth: 100,
-        offsetHeight: 30,
-        disabled: false,
-        ...extra
-    });
-    const overviewDocument = (badges, buttons) => ({
-        querySelectorAll: selector => (selector === "button" ? buttons : badges)
+    const overviewDocument = badges => ({
+        querySelectorAll: () => badges
     });
 
     const started = loadExercismOverviewScript(overviewDocument(
-        [badge("In progress")],
-        []
+        [badge("In progress")]
     ));
 
     assert.equal(
         vm.runInContext("isExercismOverviewMarkedInProgress()", started),
         true
     );
-    assert.equal(
-        vm.runInContext("isExercismMarkCompleteControlAvailable()", started),
-        false
-    );
-
-    // Hidden, unrelated and oversized matches must not count as "in progress",
-    // and a disabled control is not a completion offer.
+    // Hidden, unrelated and oversized matches must not count as "in progress".
     const ignored = loadExercismOverviewScript(overviewDocument(
         [
             badge("In progress", false),
             badge("Completed"),
             badge("In progress " + "x".repeat(60))
-        ],
-        [markCompleteButton("Mark as complete", { disabled: true })]
+        ]
     ));
 
     assert.equal(
         vm.runInContext("isExercismOverviewMarkedInProgress()", ignored),
         false
     );
-    assert.equal(
-        vm.runInContext("isExercismMarkCompleteControlAvailable()", ignored),
-        false
-    );
-
-    // The combined state is what the redirect consumes, and it remembers that
-    // the control appeared so a click cannot send the user away mid-confirmation.
+    // The state consumed by the redirect contains no mark-complete field.
     const badges = [badge("In progress")];
-    const buttons = [markCompleteButton("Mark as complete")];
     const combined = loadExercismOverviewScript(
-        overviewDocument(badges, buttons)
+        overviewDocument(badges)
     );
     const state = () => vm.runInContext(
         "JSON.stringify(readExercismOverviewExerciseState())",
@@ -306,18 +306,77 @@ test("reads the status badge, the mark-complete control, and combines them", () 
     assert.equal(state(), JSON.stringify({
         status: "",
         editorEnabled: true,
-        inProgress: true,
-        markCompleteAvailable: true
+        solved: false,
+        inProgress: true
     }));
+});
 
-    buttons.length = 0; // the click removed the control for the confirmation
+test("recognizes the explicit Exercise Solved overview heading", () => {
+    const solved = loadExercismOverviewScript({
+        querySelectorAll: selector => selector === "button"
+            ? []
+            : [{
+                innerText: "Exercise Solved",
+                offsetWidth: 100,
+                offsetHeight: 30
+            }]
+    });
 
-    assert.equal(state(), JSON.stringify({
-        status: "",
-        editorEnabled: true,
-        inProgress: true,
-        markCompleteAvailable: true
-    }));
+    assert.equal(
+        vm.runInContext("isExercismOverviewSolved()", solved),
+        true
+    );
+});
+
+test("completed in-progress pages stay on overview when the control renders during the first check", async () => {
+    let resolveStorage;
+    const storageRead = new Promise(resolve => {
+        resolveStorage = resolve;
+    });
+    const chrome = {
+        storage: {
+            local: {
+                get: async () => {
+                    await storageRead;
+                    return {};
+                }
+            },
+            onChanged: { addListener: () => {} }
+        }
+    };
+    const buttons = [];
+    const document = {
+        documentElement: null,
+        addEventListener: () => {},
+        querySelector: () => ({
+            getAttribute: () => JSON.stringify({
+                status: "iterated",
+                editor_enabled: true
+            })
+        }),
+        querySelectorAll: selector => selector === "button"
+            ? buttons
+            : []
+    };
+    const context = loadExercismOverviewScript(document, chrome);
+    vm.runInContext(
+        "location.href = 'https://exercism.org/tracks/go/exercises/example'; openExercismEditorWhenOverviewHasNothingToConfirm()",
+        context
+    );
+    buttons.push({
+        innerText: "Mark as complete",
+        offsetWidth: 100,
+        offsetHeight: 30,
+        disabled: false
+    });
+    vm.runInContext(
+        "openExercismEditorWhenOverviewHasNothingToConfirm()",
+        context
+    );
+    resolveStorage();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(vm.runInContext("sessionStorage.entries.size", context), 0);
 });
 
 test("reads the exercise status from React data and rejects unusable payloads", () => {

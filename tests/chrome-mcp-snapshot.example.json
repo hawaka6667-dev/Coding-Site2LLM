@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "description": "Chrome DevTools MCP snapshot consumed by tests/dev-check.ps1. Replace this example with a fresh snapshot before npm run dev:check.",
+  "source": "Chrome DevTools MCP list_pages",
+  "mcpConnected": true,
+  "connectedAt": "2026-09-23T00:00:00Z",
+  "pages": [
+    {
+      "url": "https://exercism.org/tracks/go/exercises/welcome-to-tech-palace/edit"
+    },
+    {
+      "url": "https://chat.deepseek.com/"
+    }
+  ],
+  "extensionServiceWorkers": [
+    {
+      "url": "chrome-extension://YOUR_EXTENSION_ID/background.js"
+    }
+  ]
+}

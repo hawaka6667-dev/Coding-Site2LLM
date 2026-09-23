@@ -25,7 +25,8 @@ test("keeps extension commands and content scripts registered", () => {
     });
     assert.deepEqual(manifest.content_scripts[0].js, [
         "content.js",
-        "worker/exercism/auto_submit_after_manual_run.js"
+        "worker/exercism/auto_submit_after_manual_run.js",
+        "worker/exercism/auto_mark_exercise_complete.js"
     ]);
     assert.deepEqual(
         manifest.content_scripts[1].js,

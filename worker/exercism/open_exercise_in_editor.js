@@ -2,8 +2,8 @@
 file: worker/exercism/open_exercise_in_editor.js
 role: redirect overview to editor when no confirmation remains
 state: available|started|iterated|completed|unknown
-redirect: available or in-progress without Mark as complete -> /edit
-stay: in-progress with Mark as complete | completed | unknown
+redirect: available or started -> /edit
+stay: iterated | completed | unknown
 guard: sessionStorage per tab and exercise
 events: turbo:load | turbo:render | MutationObserver
 setting: exercismOpenNewExerciseInEditor
@@ -37,10 +37,7 @@ const EXERCISM_IN_PROGRESS_STATUSES = [
     "in-progress"
 ];
 
-// Kept in sync with worker/exercism/auto_mark_exercise_complete.js: the same
-// control is what stops the redirect and what triggers the completion chain.
-// Each content script matches it on its own so the two stay independent.
-const EXERCISM_MARK_COMPLETE_CONTROL_PATTERN = /mark as complete/i;
+const EXERCISM_SOLVED_HEADING_PATTERN = /^exercise solved$/i;
 
 const EXERCISM_EDITOR_REDIRECT_GUARD_PREFIX =
     "codingSite2Llm.exercismOpenNewExerciseInEditor:";
@@ -147,15 +144,11 @@ function isExercismElementVisible(node) {
     return Boolean(node) && node.offsetWidth > 0 && node.offsetHeight > 0;
 }
 
-// "Mark as complete" is only offered once the exercise has been submitted, so
-// this control separates "nothing left to do on the overview page" from
-// "waiting for a completion confirmation".
-function isExercismMarkCompleteControlAvailable() {
-    return [...document.querySelectorAll("button")].some(candidate =>
-        isExercismElementVisible(candidate) &&
-        !candidate.disabled &&
-        EXERCISM_MARK_COMPLETE_CONTROL_PATTERN.test(
-            (candidate.innerText || "").trim()
+function isExercismOverviewSolved() {
+    return [...document.querySelectorAll("h1, h2, h3, h4")].some(heading =>
+        isExercismElementVisible(heading) &&
+        EXERCISM_SOLVED_HEADING_PATTERN.test(
+            (heading.innerText || heading.textContent || "").trim()
         )
     );
 }
@@ -184,30 +177,17 @@ function isExercismOverviewMarkedInProgress() {
     return false;
 }
 
-// Overview URLs that offered "Mark as complete" in this tab.
-const markCompleteControlSeenPaths = new Set();
-
 function readExercismOverviewExerciseState() {
-    const overviewPath = location.href.replace(/[?#].*$/, "");
     const buttonState = readExercismOpenEditorButtonState();
-    const hasMarkCompleteControl = isExercismMarkCompleteControlAvailable();
-
-    // Remembering the control is deliberate: the click that runs the
-    // completion chain removes or disables it for a moment, and the exercise
-    // must not be pulled into the editor in the middle of that confirmation.
-    // Keyed by URL, so a Turbo navigation to another exercise starts clean.
-    if (hasMarkCompleteControl) {
-        markCompleteControlSeenPaths.add(overviewPath);
-    }
 
     return {
         status: buttonState?.status || "",
         editorEnabled: buttonState?.editorEnabled !== false,
+        solved: isExercismOverviewSolved(),
         inProgress:
             (buttonState !== null &&
                 EXERCISM_IN_PROGRESS_STATUSES.includes(buttonState.status)) ||
-            isExercismOverviewMarkedInProgress(),
-        markCompleteAvailable: markCompleteControlSeenPaths.has(overviewPath)
+            isExercismOverviewMarkedInProgress()
     };
 }
 
@@ -218,16 +198,22 @@ function resolveExercismExerciseEditorRedirectTarget(pageUrl, exerciseState) {
 
     const state = exerciseState || {};
 
+    if (state.solved === true) {
+        return "";
+    }
+
     // Never started: Exercism opens the editor itself for such an exercise, so
     // the redirect only mirrors the page.
     if (state.status === "available" && state.editorEnabled !== false) {
         return buildExercismEditorUrl(pageUrl);
     }
 
-    // Started and nothing left to confirm: the user is here to code, so land in
-    // the editor. A mark-complete control means the overview page owns the flow
-    // and the redirect must stay out of its way.
-    if (state.inProgress === true && state.markCompleteAvailable !== true) {
+    // A submitted exercise is owned by the independent mark-complete script.
+    // The redirect script only opens genuinely started exercises.
+    if (
+        state.inProgress === true &&
+        (state.status === "started" || !state.status)
+    ) {
         return buildExercismEditorUrl(pageUrl);
     }
 
@@ -260,9 +246,11 @@ function rememberEditorRedirect(editorPath) {
 
 let overviewCheckInFlight = false;
 let editorRedirectIssued = false;
+let overviewCheckPending = false;
 
 async function openExercismEditorWhenOverviewHasNothingToConfirm() {
     if (overviewCheckInFlight || editorRedirectIssued) {
+        overviewCheckPending = true;
         return;
     }
 
@@ -295,6 +283,11 @@ async function openExercismEditorWhenOverviewHasNothingToConfirm() {
         location.assign(target);
     } finally {
         overviewCheckInFlight = false;
+
+        if (overviewCheckPending && !editorRedirectIssued) {
+            overviewCheckPending = false;
+            openExercismEditorWhenOverviewHasNothingToConfirm();
+        }
     }
 }
 

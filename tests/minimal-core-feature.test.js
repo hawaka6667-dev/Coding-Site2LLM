@@ -13,12 +13,19 @@ const vm = require("node:vm");
 const ROOT_DIR = path.join(__dirname, "..");
 
 function loadWorker() {
+    const tabState = [];
     const chrome = {
         action: { onClicked: { addListener: () => {} } },
         commands: { onCommand: { addListener: () => {} } },
         runtime: { onMessage: { addListener: () => {} } },
         scripting: { executeScript: async () => [{ result: true }] },
-        tabs: { query: async () => [], update: async () => {}, get: async () => ({}) }
+        tabs: {
+            query: async details => details?.windowId
+                ? tabState.filter(tab => tab.windowId === details.windowId)
+                : tabState,
+            update: async () => {},
+            get: async () => ({})
+        }
     };
     const context = vm.createContext({
         chrome,
@@ -34,6 +41,7 @@ function loadWorker() {
             vm.runInContext(source, context, { filename: file });
         }
     };
+    context.tabState = tabState;
 
     vm.runInContext(
         fs.readFileSync(path.join(ROOT_DIR, "background.js"), "utf8"),
@@ -176,13 +184,17 @@ test("preserves useful submission feedback while removing rankings", () => {
 
 test("returns without replacing code when no LLM copy happened", async () => {
     const context = loadWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
     const updates = [];
     context.chrome.tabs.update = async (...args) => updates.push(args);
     context.chrome.scripting.executeScript = async ({ func }) => [{
         result: func.toString().includes("navigator.clipboard") ? "" : true
     }];
     vm.runInContext(
-        "returnRoute = { windowId: 1, sourceTabId: 10, llmTabId: 20 }",
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism' } }",
         context
     );
 
@@ -199,41 +211,52 @@ test("returns without replacing code when no LLM copy happened", async () => {
 
 test("persists the default Alt+Q return route in durable extension storage", async () => {
     const context = loadWorker();
+    context.tabState.push({
+        id: 20,
+        windowId: 1,
+        index: 1,
+        active: true,
+        url: "https://chat.deepseek.com/"
+    });
     const stored = {};
     context.chrome.storage = {
         local: {
             set: async value => Object.assign(stored, value),
-            get: async key => ({ [key]: stored[key] })
+            get: async key => Array.isArray(key)
+                ? Object.fromEntries(key.map(name => [name, stored[name]]))
+                : { [key]: stored[key] }
         },
         session: {
             set: async () => {},
             get: async () => ({})
         }
     };
-    vm.runInContext(
+    await vm.runInContext(
         "saveReturnRoute({ windowId: 1, sourceTabId: 10, llmTabId: 20 })",
         context
     );
-    context.returnRoute = null;
+    context.returnRoutes = null;
 
     const route = await vm.runInContext("loadReturnRoute()", context);
 
-    assert.equal(JSON.stringify(route), JSON.stringify({
-        windowId: 1,
-        sourceTabId: 10,
-        llmTabId: 20
-    }));
+    assert.equal(route.windowId, 1);
+    assert.equal(route.sourceTabId, 10);
+    assert.equal(route.llmTabId, 20);
 });
 
 test("returns and replaces code after an LLM copy event", async () => {
     const context = loadWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
     const updates = [];
     context.chrome.tabs.update = async (...args) => updates.push(args);
     context.chrome.scripting.executeScript = async ({ func }) => [{
         result: func.toString().includes("navigator.clipboard") ? "fixed code" : true
     }];
     vm.runInContext(
-        "returnRoute = { windowId: 1, sourceTabId: 10, llmTabId: 20, copied: true, copiedText: 'fixed code' }",
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism', copied: true, copiedText: 'fixed code' } }",
         context
     );
 
@@ -250,6 +273,10 @@ test("returns and replaces code after an LLM copy event", async () => {
 
 test("returns and replaces likely code when the LLM copy button emits no copy event", async () => {
     const context = loadWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
     const updates = [];
     const executed = [];
     context.chrome.tabs.update = async (...args) => updates.push(args);
@@ -262,7 +289,7 @@ test("returns and replaces likely code when the LLM copy button emits no copy ev
         }];
     };
     vm.runInContext(
-        "returnRoute = { windowId: 1, sourceTabId: 10, llmTabId: 20 }",
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism' } }",
         context
     );
 
@@ -280,6 +307,10 @@ test("returns and replaces likely code when the LLM copy button emits no copy ev
 
 test("uses the Exercism test-and-submit adapter after replacing code", async () => {
     const context = loadWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
     let submittedTabId = null;
     context.chrome.tabs.get = async () => ({
         id: 10,
@@ -296,7 +327,7 @@ test("uses the Exercism test-and-submit adapter after replacing code", async () 
             : true
     }];
     vm.runInContext(
-        "returnRoute = { windowId: 1, sourceTabId: 10, llmTabId: 20 }",
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism' } }",
         context
     );
 
