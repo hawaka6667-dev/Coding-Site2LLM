@@ -1,6 +1,6 @@
 ## Features
 
-- 🌐 Support for coding practice platforms such as Exercism, LeetCode, Codewars, CTF，HackerRank, AtCoder, NeetCode and more
+- 🌐 Support for coding practice platforms such as Exercism, LeetCode, Codewars, CTF，HackerRank, AtCoder, NeetCode and etc
 - 🎯 One-click send: `Alt+Q` or click the extension button
 - 🤖 Works with DeepSeek, ChatGPT, Claude, Gemini, and DeepAI
 
