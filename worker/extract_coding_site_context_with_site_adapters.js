@@ -1,8 +1,21 @@
-/*
- * Responsibility: website adapters only.
- * Keep Exercism and LeetCode selectors and extraction rules in this file.
- * Functions passed to executePage must not use worker-scope helpers.
- */
+/* @machine
+file: worker/extract_coding_site_context_with_site_adapters.js
+role: extract page context and automate site editor actions
+scope: Exercism; LeetCode
+contract: executePage functions are self-contained
+*/
+
+function parseExercismFeedback(text) {
+    const normalized = String(text || "")
+        .replace(/\r\n?/g, "\n")
+        .trim();
+
+    if (!normalized || !/(?:test\s+failures?|tests\s+passed|failed|expected|actual|error)/i.test(normalized)) {
+        return "";
+    }
+
+    return normalized.slice(0, 30000);
+}
 
 const ExercismAdapter = {
 
@@ -12,7 +25,7 @@ const ExercismAdapter = {
         return EXERCISM_URL.test(url);
     },
 
-    async testAndSubmit(tabId) {
+    async testAndSubmit(tabId, { skipRun = false } = {}) {
         // Page functions passed to executePage must stay self-contained.
         // Use Exercism's own footer hooks:
         //   ".lhs-footer .run-tests-btn button" -> Run Tests
@@ -78,7 +91,7 @@ const ExercismAdapter = {
         // Run Tests is disabled while a run is in flight, and when the files
         // already match the last submission (nothing new to test). Only click
         // it when it is actually actionable.
-        if (!state.runTestsDisabled) {
+        if (!skipRun && !state.runTestsDisabled) {
             await executePage(tabId, () => {
                 const button = document.querySelector(".lhs-footer .run-tests-btn button");
 
@@ -190,7 +203,63 @@ const ExercismAdapter = {
     },
 
     async getContext(tabId) {
-        const value = await executePage(tabId, () => {
+        const value = await executePage(tabId, async () => {
+            const textWithoutMedia = element => {
+                if (!element) {
+                    return "";
+                }
+
+                const copy = element.cloneNode(true);
+                copy.querySelectorAll(
+                    "img, picture, svg, video, audio, canvas, iframe"
+                ).forEach(media => media.remove());
+                return copy.innerText?.trim() || "";
+            };
+            const feedbackTabs = ["Instructions", "Tests", "Results"];
+            const tabs = [...document.querySelectorAll(".tabs .c-tab")];
+            const selectedFeedbackTab = tabs.find(tab =>
+                feedbackTabs.some(label =>
+                    label.toLowerCase() === (tab.innerText || "").trim().toLowerCase()
+                ) && tab.classList.contains("selected")
+            );
+            const waitForTab = () => new Promise(resolve => setTimeout(resolve, 0));
+
+            const readFeedbackPanels = async () => {
+                const panels = [];
+
+                for (const label of feedbackTabs) {
+                    const tab = tabs.find(candidate =>
+                        label.toLowerCase() ===
+                        (candidate.innerText || "").trim().toLowerCase()
+                    );
+
+                    if (!tab) {
+                        continue;
+                    }
+
+                    tab.click();
+                    await waitForTab();
+
+                    const panel = document.getElementById(
+                        tab.getAttribute("aria-controls") || ""
+                    );
+                    const text = textWithoutMedia(panel)
+                        .replace(/\r\n?/g, "\n")
+                        .trim();
+
+                    if (text) {
+                        panels.push(`${label}\n${text}`);
+                    }
+                }
+
+                if (selectedFeedbackTab) {
+                    selectedFeedbackTab.click();
+                }
+
+                return panels.join("\n\n").slice(0, 30000);
+            };
+
+            const feedbackPromise = readFeedbackPanels();
             const editor = document.querySelector('[data-react-id="editor"]');
 
             if (editor) {
@@ -202,7 +271,12 @@ const ExercismAdapter = {
                         const files = data.default_files;
 
                         if (Array.isArray(files) && files.length > 0) {
-                            return { found: true, method: "Exercism data", files };
+                            return {
+                                found: true,
+                                method: "Exercism data",
+                                files,
+                                feedback: await feedbackPromise
+                            };
                         }
                     } catch (_) {
                         // Try the rendered editor below.
@@ -224,7 +298,8 @@ const ExercismAdapter = {
                     return {
                         found: true,
                         method: "rendered editor",
-                        files: [{ filename: "current-source", content: source }]
+                        files: [{ filename: "current-source", content: source }],
+                        feedback: await feedbackPromise
                     };
                 }
             }
@@ -256,6 +331,7 @@ const ExercismAdapter = {
 
         return {
             platform: this.name,
+            feedback: value.feedback,
             source
         };
     }

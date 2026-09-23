@@ -8,11 +8,21 @@
 - LLM：快速恢复技术状态，知道哪些行为是契约，哪些只是实现细节。
 
 
-## 0. 开发者的话（其他开发者可以改这里）
-我是一边刷题一边开着vs搞开发，所以默认要打开chrome-dev-tool mcp（这个有问题退出简报），以及显式提醒我点击浏览器确认，改完功能默认reload一下扩展
+## 0. 开发者的自动化要求（其他开发者可以改这里）
+以下是项目开发自动化的硬性流程，不依赖开发者临时提醒：
+
+1. 每个开发环节开始时，必须先打开并使用 Chrome DevTools MCP；MCP 不可用时在简报中明确说明并停止真实页面验证。
+2. 需要浏览器确认时，必须明确提醒开发者点击确认。
+3. 功能修改完成后，必须 reload 未打包扩展，并按需刷新相关页面。
 
 因为我就在刷题，当场测试很便利，而且可能页面上就留有测试素材，因此开发时只需考虑快速实现就行
 要么利用我的页面，要么ctrl n自己搞一个然后用完关闭
+
+.feedback 是项目自动消费的反馈栈：只有用户将某条 feedback 推入聊天框后，才处理这一条；不得扫描、归档或修改其它 feedback。
+
+用户推入聊天框的 feedback 已验证解决后，只将这一条移到 `.feedback/old/`（相当于 pop），不要删除，也不要顺手处理其它截图或说明。
+
+环节结束后，自己看一下要不要更新helper
 
 ## 1. 项目定位
 
@@ -41,7 +51,9 @@ URL 路由：选择站点 adapter
 
 LLM 页面：等待用户操作
    ├─ 未发生复制：Alt+Q 直接回到原 code Tab
-   └─ 发生过复制：Alt+Q 回到原 code Tab，回填复制文本并触发 Ctrl+Enter
+   └─ 发生过复制：Alt+Q 回到原 code Tab，回填复制文本并提交
+                    ├─ Exercism：用户 Run Tests / LLM 回填 → 等待 Submit 可用 → Submit
+                    └─ 其它站点：兼容路径派发 Ctrl+Enter
 ```
 
 | 文件 | 职责 |
@@ -52,8 +64,9 @@ LLM 页面：等待用户操作
 | `worker/route_coding_page_and_build_llm_prompt.js` | URL 路由、上下文路由和 prompt 组装 |
 | `worker/run_coding_context_to_llm_workflow.js` | 串联从编程页面到 LLM 页面的完整传输，并读取用户选择的 provider |
 | `worker/llm_copy_tracker.js` | 监听 LLM 页面真实 copy 事件并通知 service worker |
-| `worker/exercism_overview_content_scripts/open_exercise_in_editor.js` | Exercism overview 页 content script：判定是否直接进入编辑页，并声明它自己的开关 |
-| `worker/exercism_overview_content_scripts/auto_mark_exercise_complete.js` | Exercism overview 页 content script：出现 `Mark as complete` 时请求 service worker 走确认链 |
+| `worker/exercism/auto_submit_after_manual_run.js` | Exercism 编辑页监听用户 Run Tests，并复用 service worker 的提交链 |
+| `worker/exercism/open_exercise_in_editor.js` | Exercism overview 页 content script：判定是否直接进入编辑页，并声明它自己的开关 |
+| `worker/exercism/auto_mark_exercise_complete.js` | Exercism overview 页 content script：出现 `Mark as complete` 时请求 service worker 走确认链 |
 | `popup/popup.html` / `popup/popup.js` | 扩展 popup：Exercism 开关 + 发送上下文按钮 |
 | `tests/minimal-core-feature.test.js` | prompt、上下文诊断和反馈清理的最小功能测试 |
 | `tests/local-routing.test.js` | URL 和 adapter 路由的局部测试 |
@@ -80,7 +93,10 @@ Exercism 的编辑页和 overview 页是两个不同的路由状态，不能混�
 扩展提供的辅助行为：
 
 - 在编辑页拦截 `Ctrl+Enter`，避免编辑器把它解释成普通换行或其他快捷键。
+- 用户直接点击 `Run Tests` 后，编辑页脚本通知 service worker；扩展跳过重复测试，继续等待通过并自动点击 `Submit`。
 - 按页面实际状态执行：`Run Tests`（仅当按钮可用）→ 等待 `Submit` 变为可用 → `Submit`。
+- LLM 回填代码后复用同一套测试与提交 adapter；不依赖页面是否接受扩展伪造的 `Ctrl+Enter`。
+- 同一 tab 的提交请求共享一个进行中的 promise，避免手动点击、快捷键和 LLM 回填同时触发重复提交。
 - 页脚是稳定锚点：`.lhs-footer .run-tests-btn button` / `.lhs-footer .submit-btn button`。不要按文字匹配按钮，tab 栏里也有 `Tests`，结果面板里还有第二个 `Submit`。
 - `Submit` 的可用条件是「最近一次 run 通过」且「当前文件与该次提交一致」，所以提交前必须等它变为可用，不能用固定延时。
 - `Continue without waiting` 属于**提交之后**的 automated feedback 弹窗，不是编辑页 run 流程的一部分。
@@ -102,19 +118,22 @@ overview 页还有一条独立行为：题目**还有事可做**时，默认直�
 - 打开 `/edit` 会把题目置为 `started`，不会弹回 overview，所以跳转是单向的。每个 tab 每个题目只跳一次（sessionStorage 守卫），避免极端情况下死循环，同时保留 Back 回 overview 的能力。
 - Exercism 用 Turbo 做站内跳转，content script 不会重新注入，所以这里同时监听 `turbo:load` / `turbo:render` 和 DOM 变化。
 
-overview 专属脚本集中在 `worker/exercism_overview_content_scripts/`：只跑 overview 页（manifest 用 `exclude_matches` 排除 `/edit`，编辑页由根目录的 `content.js` 负责）。两个文件互不依赖：`open_exercise_in_editor.js` 决定去不去编辑页，`auto_mark_exercise_complete.js` 只负责在 `Mark as complete` 出现时请求确认链；`Mark as complete` 的匹配条件两边各写一份，避免隐式的加载顺序依赖。
+Exercism 专属脚本集中在 `worker/exercism/`：只跑 overview 页的脚本由 manifest 用 `exclude_matches` 排除 `/edit`。编辑页由根目录的 `content.js` 负责快捷键桥接，由 `worker/exercism/auto_submit_after_manual_run.js` 负责监听用户的 Run Tests。两个 overview 文件互不依赖：`open_exercise_in_editor.js` 决定去不去编辑页，`auto_mark_exercise_complete.js` 只负责在 `Mark as complete` 出现时请求确认链；`Mark as complete` 的匹配条件两边各写一份，避免隐式的加载顺序依赖。
 
 ## 5.1 扩展面板与开关
 
-点击扩展图标打开 popup（`action.default_popup`），里面是「发送上下文」按钮和 Exercism 跳转开关。开关默认开启，键名 `exercismOpenNewExerciseInEditor`，声明在 `worker/exercism_overview_content_scripts/open_exercise_in_editor.js`，由 `popup/popup.js` 写入 `chrome.storage.local`。
+点击扩展图标打开 popup（`action.default_popup`），里面是「发送上下文」按钮和 Exercism 跳转开关。开关默认开启，键名 `exercismOpenNewExerciseInEditor`，声明在 `worker/exercism/open_exercise_in_editor.js`，由 `popup/popup.js` 写入 `chrome.storage.local`。完整的 Exercism 功能开关位于 Options 页面，并统一保存在 `chrome.storage.local`。
 
 - 该开关是**临时性质**：用来决定正式版是否保留这个跳转行为，删掉时只需移除判断和 popup 里对应控件。
 - 设置变化通过 `chrome.storage.onChanged` 即时生效，不必刷新已打开的页面。
 - 注意 side effect：`default_popup` 会接管图标点击，`chrome.action.onClicked` 不再触发。因此发送上下文改由 popup 按钮或 `Alt+Q` 触发；`chrome.action.onClicked` 监听器保留但处于休眠状态，删掉 popup 即可恢复原来的单击发送。
 - popup 的 `LLM provider` 下拉框使用 `selectedLlmProvider` 保存选择，默认值是 `DeepSeek`。发送上下文时只查找所选 provider 的已有标签页；找不到时在当前窗口创建该 provider 的标签页，不会因为附近存在其它 LLM 标签页而改用其它 provider。
-- 从 code 页用 `Alt+Q` 成功发送后，扩展记录来源 code Tab 和目标 LLM Tab。LLM 页再次按 `Alt+Q` 总是回到来源 Tab：如果本次 LLM 页面没有发生过 `copy` 事件，只回跳、不修改代码；如果发生过复制，则回填复制文本并触发 `Ctrl+Enter`。不能用剪贴板当前是否非空代替 copy 事件，因为那可能是之前遗留的内容。
+- 从 code 页用 `Alt+Q` 成功发送后，扩展记录来源 code Tab 和目标 LLM Tab。LLM 页再次按 `Alt+Q` 总是回到来源 Tab：如果本次 LLM 页面没有发生过 `copy` 事件，默认只回跳；如果 LLM 的复制按钮没有派发 DOM `copy` 事件，则读取当前剪贴板，并且只有内容看起来像代码时才回填，避免把遗留的普通文本误提交。明确记录到的复制文本优先使用。
+- 这条来源/目标路由持久保存在 `chrome.storage.local`（同时写入 session storage），所以 service worker 被回收或扩展重启后，`Alt+Q` 循环仍能恢复。
 
 这些行为属于扩展自己的自动化；页面结构变化时，应通过真实页面重新验证，不应假设 Exercism 提供稳定的内部 API。
+
+仓库反馈管理：当前待处理的截图、记录和说明放在 `.feedback/`；某条反馈对应的问题完成并验证后，移动到 `.feedback/old/`，不要删除原始反馈文件。未完成的反馈继续留在顶层，避免把 backlog 误归档。
 
 ## 6. MCP 调试探针
 

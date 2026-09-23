@@ -27,13 +27,18 @@
   "background": {
     "service_worker": "background.js"
   },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
       "matches": [
         "https://exercism.org/tracks/*/exercises/*/edit*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "worker/exercism/auto_submit_after_manual_run.js"
       ],
       "run_at": "document_start"
     },
@@ -45,8 +50,22 @@
         "https://exercism.org/tracks/*/exercises/*/edit*"
       ],
       "js": [
-        "worker/open_new_exercism_exercise_in_editor.js",
-        "worker/auto_mark_exercism_complete.js"
+        "worker/exercism/open_exercise_in_editor.js",
+        "worker/exercism/auto_mark_exercise_complete.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chat.deepseek.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://deepai.org/*"
+      ],
+      "js": [
+        "worker/llm_copy_tracker.js"
       ],
       "run_at": "document_start"
     }

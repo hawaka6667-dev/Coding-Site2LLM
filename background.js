@@ -1,7 +1,8 @@
-/*
- * Manifest V3 service-worker entry point.
- * Keep the import order: later files use globals defined by earlier files.
- */
+/* @machine
+file: background.js
+role: service-worker entry; load modules and register runtime
+contract: preserve import order; later files consume earlier globals
+*/
 importScripts(
     "worker/configure_supported_coding_sites_and_llm_providers.js",
     "worker/inject_scripts_and_control_coding_page.js",

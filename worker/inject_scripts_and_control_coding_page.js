@@ -1,7 +1,8 @@
-/*
- * Responsibility: service-worker utilities for page injection and timing.
- * Functions passed to executePage must remain self-contained page functions.
- */
+/* @machine
+file: worker/inject_scripts_and_control_coding_page.js
+role: execute page functions and control page timing
+contract: executePage functions are self-contained
+*/
 
 function pageUrl(url) {
     return typeof url === "string" && url.startsWith("view-source:")

@@ -1,12 +1,10 @@
-/*
- * Responsibility: Exercism keyboard bridge only.
- * Ctrl+Enter is intercepted before the editor can insert a newline, then
- * sends a message; button automation belongs in
- * worker/extract_coding_site_context_with_site_adapters.js.
- * Chrome commands cannot bind Enter.
- * 
- * WARNING有关这个功能的代码改了极其容易出事，已经好几次拓展其他功能而失效因此回档了，请慎重考虑方案
- */
+/* @machine
+file: content.js
+role: Exercism Ctrl+Enter bridge to service worker
+owns: keyboard capture only; button automation belongs to site adapter
+contract: Chrome commands cannot bind Enter
+risk: high; changes here have regressed extension behavior before
+*/
 
 document.addEventListener("keydown", event => {
     if (
@@ -22,5 +20,17 @@ document.addEventListener("keydown", event => {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    chrome.runtime.sendMessage({ type: "exercism-test-submit" });
+
+    const sendMessage = globalThis.chrome?.runtime?.sendMessage;
+    if (typeof sendMessage !== "function") {
+        return;
+    }
+
+    try {
+        sendMessage.call(globalThis.chrome.runtime, {
+            type: "exercism-test-submit"
+        });
+    } catch (_) {
+        // The extension context may disappear while an existing tab remains open.
+    }
 }, true);

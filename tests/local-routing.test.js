@@ -1,8 +1,8 @@
-/*
- * Local routing tests for supported coding sites and LLM providers, plus the
- * Exercism overview -> editor redirect decision.
- * Use this suite for a local routing change, without global maintenance checks.
- */
+/* @machine
+file: tests/local-routing.test.js
+role: verify routing, adapters, providers, overview redirect
+run: npm run test:routing
+*/
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -12,13 +12,13 @@ const vm = require("node:vm");
 
 const ROOT_DIR = path.join(__dirname, "..");
 
-function loadWorker() {
+function loadWorker({ tabs = [] } = {}) {
     const chrome = {
         action: { onClicked: { addListener: () => {} } },
         commands: { onCommand: { addListener: () => {} } },
         runtime: { onMessage: { addListener: () => {} } },
         scripting: { executeScript: async () => [{ result: true }] },
-        tabs: { query: async () => [], update: async () => {} }
+        tabs: { query: async () => tabs, update: async () => {} }
     };
     const context = vm.createContext({ chrome, console, performance, setTimeout });
     context.importScripts = (...files) => {
@@ -84,7 +84,58 @@ test("recognizes valid LLM provider URLs only", () => {
     assert.equal(result, true);
 });
 
-function loadExercismOverviewScript() {
+test("finds the selected provider to the left and opens it to the left otherwise", async () => {
+    const leftProviderTab = { id: 2, index: 1, url: "https://claude.ai/" };
+    const rightProviderTab = { id: 3, index: 3, url: "https://claude.ai/" };
+    const currentTab = { id: 4, index: 2, windowId: 1 };
+    const context = loadWorker({
+        tabs: [leftProviderTab, currentTab, rightProviderTab]
+    });
+    context.currentTab = currentTab;
+
+    const reused = await vm.runInContext(
+        "findLlmTab(currentTab, LLM_PROVIDERS.find(provider => provider.name === 'Claude'))",
+        context
+    );
+
+    assert.equal(reused.tab.id, leftProviderTab.id);
+
+    const createdTabs = [];
+    context.chrome.tabs.create = async details => {
+        createdTabs.push(details);
+        return { id: 5, ...details };
+    };
+    const noLeftProviderContext = loadWorker({
+        tabs: [
+            { id: 6, index: 1, url: "https://chatgpt.com/" },
+            currentTab,
+            rightProviderTab
+        ]
+    });
+    noLeftProviderContext.currentTab = currentTab;
+    noLeftProviderContext.chrome.tabs.create = async details => {
+        createdTabs.push(details);
+        return { id: 7, ...details };
+    };
+
+    const created = await vm.runInContext(
+        "findLlmTab(currentTab, LLM_PROVIDERS.find(provider => provider.name === 'Claude'))",
+        noLeftProviderContext
+    );
+
+    assert.equal(created.tab.id, 7);
+    assert.equal(
+        JSON.stringify(createdTabs.at(-1)),
+        JSON.stringify({
+            windowId: 1,
+            index: 2,
+            url: "https://claude.ai/",
+            active: false
+        })
+    );
+});
+
+function loadExercismOverviewScript(documentOverrides = {}) {
     const chrome = {
         storage: {
             local: { get: async () => ({}), set: async () => {} },
@@ -94,7 +145,8 @@ function loadExercismOverviewScript() {
     const document = {
         documentElement: null,
         addEventListener: () => {},
-        querySelector: () => null
+        querySelector: () => null,
+        ...documentOverrides
     };
     const sessionStorage = {
         entries: new Map(),
@@ -114,7 +166,7 @@ function loadExercismOverviewScript() {
     });
 
     for (const file of [
-        "worker/open_new_exercism_exercise_in_editor.js"
+        "worker/exercism/open_exercise_in_editor.js"
     ]) {
         vm.runInContext(
             fs.readFileSync(path.join(ROOT_DIR, file), "utf8"),
@@ -126,52 +178,147 @@ function loadExercismOverviewScript() {
     return context;
 }
 
-test("opens the editor only for an Exercism exercise that is still available", () => {
+test("opens the editor for a new or unfinished exercise without a mark-complete control", () => {
     const context = loadExercismOverviewScript();
     const target = (url, state) => vm.runInContext(
         `resolveExercismExerciseEditorRedirectTarget(${JSON.stringify(url)}, ${JSON.stringify(state)})`,
         context
     );
     const overview = "https://exercism.org/tracks/rust/exercises/anagram";
+    const editorUrl = overview + "/edit";
+    const available = { status: "available", editorEnabled: true };
+    const inProgress = extra => ({
+        status: "started",
+        editorEnabled: true,
+        inProgress: true,
+        markCompleteAvailable: false,
+        ...extra
+    });
 
+    // Never started: Exercism opens the editor by itself, the redirect mirrors it.
+    assert.equal(target(overview, available), editorUrl);
+    assert.equal(target(overview + "?foo=1", available), editorUrl);
+    assert.equal(target(overview + "/", available), editorUrl);
+
+    // Started and the overview page has nothing left to confirm.
+    assert.equal(target(overview, inProgress({})), editorUrl);
     assert.equal(
-        target(overview, { status: "available", editorEnabled: true }),
-        "https://exercism.org/tracks/rust/exercises/anagram/edit"
-    );
-    assert.equal(
-        target(overview + "?foo=1", { status: "available", editorEnabled: true }),
-        "https://exercism.org/tracks/rust/exercises/anagram/edit"
-    );
-    assert.equal(
-        target(overview + "/", { status: "available", editorEnabled: true }),
-        "https://exercism.org/tracks/rust/exercises/anagram/edit"
+        target("https://exercism.org/tracks/rust/exercises/clock", inProgress({
+            status: "iterated"
+        })),
+        "https://exercism.org/tracks/rust/exercises/clock/edit"
     );
 
-    // A started exercise keeps its overview page: Exercism still renders a
-    // "Start in editor" button there, so only the status may decide.
+    // Started and waiting for a completion confirmation: the mark-complete chain
+    // owns the overview page, so the redirect stays out of its way.
     assert.equal(
-        target("https://exercism.org/tracks/rust/exercises/gigasecond", {
-            status: "started",
-            editorEnabled: true
+        target(overview, inProgress({ markCompleteAvailable: true })),
+        ""
+    );
+
+    // Completed exercises keep their overview page.
+    assert.equal(target(overview, { status: "completed", editorEnabled: true }), "");
+    assert.equal(
+        target(overview, {
+            status: "completed",
+            editorEnabled: true,
+            inProgress: false
         }),
         ""
     );
-    assert.equal(target(overview, { status: "completed", editorEnabled: true }), "");
+
+    // The editor is only entered when Exercism offers it at all.
     assert.equal(target(overview, { status: "available", editorEnabled: false }), "");
     assert.equal(target(overview, null), "");
 
     // Editor pages and other sites are never redirected.
+    assert.equal(target(editorUrl, available), "");
     assert.equal(
-        target(overview + "/edit", { status: "available", editorEnabled: true }),
+        target("https://leetcode.com/problems/two-sum/", available),
         ""
     );
+});
+
+test("reads the status badge, the mark-complete control, and combines them", () => {
+    const badge = (text, visible = true) => ({
+        textContent: text,
+        innerText: text,
+        offsetWidth: visible ? 40 : 0,
+        offsetHeight: visible ? 20 : 0
+    });
+    const markCompleteButton = (text, extra = {}) => ({
+        textContent: text,
+        innerText: text,
+        offsetWidth: 100,
+        offsetHeight: 30,
+        disabled: false,
+        ...extra
+    });
+    const overviewDocument = (badges, buttons) => ({
+        querySelectorAll: selector => (selector === "button" ? buttons : badges)
+    });
+
+    const started = loadExercismOverviewScript(overviewDocument(
+        [badge("In progress")],
+        []
+    ));
+
     assert.equal(
-        target("https://leetcode.com/problems/two-sum/", {
-            status: "available",
-            editorEnabled: true
-        }),
-        ""
+        vm.runInContext("isExercismOverviewMarkedInProgress()", started),
+        true
     );
+    assert.equal(
+        vm.runInContext("isExercismMarkCompleteControlAvailable()", started),
+        false
+    );
+
+    // Hidden, unrelated and oversized matches must not count as "in progress",
+    // and a disabled control is not a completion offer.
+    const ignored = loadExercismOverviewScript(overviewDocument(
+        [
+            badge("In progress", false),
+            badge("Completed"),
+            badge("In progress " + "x".repeat(60))
+        ],
+        [markCompleteButton("Mark as complete", { disabled: true })]
+    ));
+
+    assert.equal(
+        vm.runInContext("isExercismOverviewMarkedInProgress()", ignored),
+        false
+    );
+    assert.equal(
+        vm.runInContext("isExercismMarkCompleteControlAvailable()", ignored),
+        false
+    );
+
+    // The combined state is what the redirect consumes, and it remembers that
+    // the control appeared so a click cannot send the user away mid-confirmation.
+    const badges = [badge("In progress")];
+    const buttons = [markCompleteButton("Mark as complete")];
+    const combined = loadExercismOverviewScript(
+        overviewDocument(badges, buttons)
+    );
+    const state = () => vm.runInContext(
+        "JSON.stringify(readExercismOverviewExerciseState())",
+        combined
+    );
+
+    assert.equal(state(), JSON.stringify({
+        status: "",
+        editorEnabled: true,
+        inProgress: true,
+        markCompleteAvailable: true
+    }));
+
+    buttons.length = 0; // the click removed the control for the confirmation
+
+    assert.equal(state(), JSON.stringify({
+        status: "",
+        editorEnabled: true,
+        inProgress: true,
+        markCompleteAvailable: true
+    }));
 });
 
 test("reads the exercise status from React data and rejects unusable payloads", () => {

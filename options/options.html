@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Coding Site2LLM Settings</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --page: #f6f7f9;
+            --panel: #ffffff;
+            --text: #1b1d21;
+            --muted: #5c626b;
+            --border: #d9dce1;
+            --button: #3a6df0;
+            --button-text: #ffffff;
+            --hover: #2f5cd8;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --page: #17191d;
+                --panel: #22252a;
+                --text: #eceef1;
+                --muted: #9aa1ab;
+                --border: #34383e;
+                --button: #4d7bf5;
+                --hover: #668df7;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-width: 320px;
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 32px 20px 48px;
+            background: var(--page);
+            color: var(--text);
+            font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+        }
+
+        header {
+            margin-bottom: 24px;
+        }
+
+        h1,
+        h2,
+        p {
+            margin-top: 0;
+        }
+
+        h1 {
+            margin-bottom: 6px;
+            font-size: 24px;
+        }
+
+        h2 {
+            margin-bottom: 4px;
+            font-size: 16px;
+        }
+
+        .intro,
+        .section-description,
+        .detail {
+            color: var(--muted);
+        }
+
+        .intro {
+            margin-bottom: 0;
+        }
+
+        section {
+            margin-top: 18px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel);
+        }
+
+        .section-description {
+            margin-bottom: 14px;
+        }
+
+        .setting {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            padding: 12px 0;
+            border-top: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .setting:first-of-type {
+            border-top: 0;
+        }
+
+        .setting input {
+            width: 17px;
+            height: 17px;
+            margin: 2px 0 0;
+            accent-color: var(--button);
+        }
+
+        .label {
+            display: block;
+            font-weight: 600;
+        }
+
+        .detail {
+            display: block;
+            margin-top: 2px;
+        }
+
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: 0;
+            border-radius: 6px;
+            background: var(--button);
+            color: var(--button-text);
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: var(--hover);
+        }
+
+        #reset {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        #status {
+            min-height: 21px;
+            margin: 0;
+            color: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Coding Site2LLM Settings</h1>
+        <p class="intro">Manage features by site without changing the quick actions in the popup.</p>
+    </header>
+
+    <main>
+        <section aria-labelledby="exercism-heading">
+            <h2 id="exercism-heading">Exercism</h2>
+            <p class="section-description">Control the Exercism workflow features currently available in the extension.</p>
+
+            <label class="setting">
+                <input type="checkbox" data-setting="exercismOpenNewExerciseInEditor">
+                <span>
+                    <span class="label">Open new exercises in the editor</span>
+                    <span class="detail">Redirect unfinished Exercism exercises to their editor page.</span>
+                </span>
+            </label>
+
+            <label class="setting">
+                <input type="checkbox" data-setting="exercismAutoSubmitAfterManualRun">
+                <span>
+                    <span class="label">Auto-submit after manual Run Tests</span>
+                    <span class="detail">Continue to Submit after you manually start a passing test run.</span>
+                </span>
+            </label>
+
+            <label class="setting">
+                <input type="checkbox" data-setting="exercismAutoMarkComplete">
+                <span>
+                    <span class="label">Automatically mark exercises complete</span>
+                    <span class="detail">Complete the Exercism confirmation flow when Mark as complete is available.</span>
+                </span>
+            </label>
+        </section>
+
+        <section aria-labelledby="llm-heading">
+            <h2 id="llm-heading">LLM</h2>
+            <p class="section-description">The popup keeps the provider selector for fast changes.</p>
+        </section>
+    </main>
+
+    <div class="actions">
+        <button id="reset" type="button">Reset defaults</button>
+        <p id="status" role="status" aria-live="polite"></p>
+    </div>
+
+    <script src="options.js"></script>
+</body>
+
+</html>

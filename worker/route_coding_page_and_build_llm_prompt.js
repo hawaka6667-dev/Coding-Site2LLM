@@ -1,7 +1,8 @@
-/*
- * Responsibility: map URLs to adapters and assemble captured fields.
- * This file must not add generated instructions or prompt prose.
- */
+/* @machine
+file: worker/route_coding_page_and_build_llm_prompt.js
+role: map page URL to adapter and assemble captured fields
+contract: no generated instructions or prompt prose
+*/
 
 const PLATFORMS = [
     ExercismAdapter,
@@ -19,13 +20,13 @@ function cleanLeetCodeDescription(text) {
         .trim();
 }
 
-    function cleanLeetCodeFeedback(text) {
-        return String(text || "")
+function cleanLeetCodeFeedback(text) {
+    return String(text || "")
         .split(/\r?\n/)
         .map(line => line.replace(/\s+Beats\b.*$/i, "").trim())
         .filter(line => line && !/^Beats\b/i.test(line))
         .join("\n");
-    }
+}
 
 function getPlatform(url) {
     if (isViewSourceUrl(url)) {

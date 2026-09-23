@@ -1,3 +1,4 @@
+<!-- @machine file: popup/popup.html; role: render popup controls; contract: load popup.js -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -88,6 +89,33 @@
             margin: 6px 0 0 24px;
             color: var(--muted);
         }
+
+        .provider {
+            display: grid;
+            gap: 5px;
+            margin-bottom: 12px;
+        }
+
+        .provider select {
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+        }
+
+        .provider option {
+            background: #ffffff;
+            color: #1b1d21;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .provider option {
+                background: #1b1d21;
+                color: #eceef1;
+            }
+        }
     </style>
 </head>
 
@@ -99,14 +127,26 @@
 
     <hr>
 
+    <label class="provider" for="llm-provider">
+        <span>LLM provider</span>
+        <select id="llm-provider">
+            <option value="DeepSeek">DeepSeek</option>
+            <option value="ChatGPT">ChatGPT</option>
+            <option value="Claude">Claude</option>
+            <option value="Gemini">Gemini</option>
+            <option value="DeepAI">DeepAI</option>
+        </select>
+    </label>
+
     <label class="setting" for="exercism-open-new-exercise-in-editor">
         <input type="checkbox" id="exercism-open-new-exercise-in-editor">
         <span>Open new Exercism exercises in the editor</span>
     </label>
     <p class="detail">
-        An overview page whose exercise is still available goes straight to
-        <code>&lt;exercise&gt;/edit</code>. Started exercises keep their overview page.
+        Add Ctrl+Enter submission support.
     </p>
+
+    <button id="open-options" type="button">More settings</button>
 
     <script src="popup.js"></script>
 </body>

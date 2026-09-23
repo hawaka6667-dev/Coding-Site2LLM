@@ -1,21 +1,9 @@
-/*
- * @deprecated Legacy HTTP remote-debugging smoke test.
- * Use Chrome DevTools MCP for live page probes instead.
- *
- * Browser smoke test for website adapters.
- *
- * Keep this test focused on page-side selectors and editor availability. The
- * extension workflow itself is covered by tests/unit-routing.test.js.
- *
- * This legacy test requires Chrome's HTTP remote-debugging endpoint. Start
- * Chrome with remote debugging enabled, then run:
- *   node tests/browser-smoke.test.js
- *
- * Optional:
- *   node tests/browser-smoke.test.js --port 9222 --json
- *   node tests/browser-smoke.test.js --platform Codewars
- *   node tests/browser-smoke.test.js --all
- */
+/* @machine
+file: tests/deprecated/browser-smoke.test.js
+role: verify live page adapter selectors
+status: deprecated; use Chrome DevTools MCP
+requires: HTTP remote-debugging endpoint
+*/
 
 const EXERCISM_URL =
     /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/]+\/edit/;

@@ -1,37 +1,31 @@
-/*
- * Responsibility: find the nearby LLM tab and insert captured content.
- * Provider-specific tab and input behavior belongs here.
- */
+/* @machine
+file: worker/find_llm_tab_and_insert_prompt.js
+role: find nearby LLM tab and insert captured prompt
+owns: provider-specific tab and input behavior
+*/
 
-async function findLlmTab(currentTab) {
+async function findLlmTab(currentTab, preferredProvider = LLM_PROVIDERS[0]) {
     const tabs = await chrome.tabs.query({ windowId: currentTab.windowId });
-    const ordered = tabs
+    const leftOfCurrent = tabs
         .filter(tab => tab.id !== currentTab.id && typeof tab.index === "number")
+        .filter(tab => tab.index < currentTab.index)
         .sort((left, right) => right.index - left.index);
-    const leftOfCurrent = ordered.filter(tab => tab.index < currentTab.index);
-    const rightOfCurrent = ordered
-        .filter(tab => tab.index > currentTab.index)
-        .sort((left, right) => right.index - left.index);
-    const candidates = [
-        ...leftOfCurrent.sort((left, right) => right.index - left.index),
-        ...rightOfCurrent
-    ];
 
-    for (const tab of candidates) {
-        const provider = LLM_PROVIDERS.find(item => item.match(tab.url || ""));
-        if (provider) {
-            return { tab, provider };
-        }
+    const existingTab = leftOfCurrent.find(tab =>
+        preferredProvider.match(tab.url || "")
+    );
+
+    if (existingTab) {
+        return { tab: existingTab, provider: preferredProvider };
     }
 
-    const provider = LLM_PROVIDERS[0];
     const tab = await chrome.tabs.create({
         windowId: currentTab.windowId,
         index: currentTab.index,
-        url: provider.url,
+        url: preferredProvider.url,
         active: false
     });
-    return { tab, provider };
+    return { tab, provider: preferredProvider };
 }
 
 async function focusDeepSeekInput(tabId) {

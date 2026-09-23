@@ -1,18 +1,17 @@
-/*
- * Responsibility: extension popup - the toggle for the Exercism overview
- * redirect, plus the send action that the popup now owns.
- *
- * A default_popup replaces chrome.action.onClicked, so "send context to the
- * LLM" is triggered from the button here instead of from an icon click.
- */
-
-/* Setting: keep this key in sync with
- * worker/open_new_exercism_exercise_in_editor.js. */
+/* @machine
+file: popup/popup.js
+role: own popup actions and persist user settings
+contract: default_popup owns send; sync Exercism redirect key with overview script
+*/
 const EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_SETTING_KEY =
     "exercismOpenNewExerciseInEditor";
+const SELECTED_LLM_PROVIDER_KEY = "selectedLlmProvider";
+const DEFAULT_LLM_PROVIDER = "DeepSeek";
 
 const toggle = document.getElementById("exercism-open-new-exercise-in-editor");
+const providerSelect = document.getElementById("llm-provider");
 const sendButton = document.getElementById("send-context");
+const optionsButton = document.getElementById("open-options");
 const status = document.getElementById("status");
 
 let statusTimer = 0;
@@ -37,6 +36,23 @@ async function renderToggle() {
     toggle.checked =
         stored[EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_SETTING_KEY] !== false;
 }
+
+async function renderProvider() {
+    const stored = await chrome.storage.local.get(SELECTED_LLM_PROVIDER_KEY);
+    const value = stored[SELECTED_LLM_PROVIDER_KEY] || DEFAULT_LLM_PROVIDER;
+
+    providerSelect.value = [...providerSelect.options].some(option =>
+        option.value === value
+    ) ? value : DEFAULT_LLM_PROVIDER;
+}
+
+providerSelect.addEventListener("change", async () => {
+    await chrome.storage.local.set({
+        [SELECTED_LLM_PROVIDER_KEY]: providerSelect.value
+    });
+
+    showStatus(`LLM: ${providerSelect.value}`);
+});
 
 toggle.addEventListener("change", async () => {
     await chrome.storage.local.set({
@@ -67,4 +83,9 @@ sendButton.addEventListener("click", async () => {
     }
 });
 
+optionsButton.addEventListener("click", () => {
+    chrome.runtime.openOptionsPage();
+});
+
 renderToggle();
+renderProvider();

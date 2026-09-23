@@ -1,7 +1,8 @@
-/*
- * Responsibility: shared worker configuration only.
- * Keep URL matching, provider metadata, and input selectors here.
- */
+/* @machine
+file: worker/configure_supported_coding_sites_and_llm_providers.js
+role: define site URL matches, provider metadata, input selectors
+owns: configuration only
+*/
 
 const EXERCISM_URL =
     /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/?#]+\/edit(?:[/?#]|$)/;
@@ -26,19 +27,23 @@ const LLM_PROVIDERS = [
     },
     {
         name: "ChatGPT",
+        url: "https://chatgpt.com/",
         match: url => /^https:\/\/(chat\.)?openai\.com\//.test(url) ||
             /^https:\/\/chatgpt\.com\//.test(url)
     },
     {
         name: "Claude",
+        url: "https://claude.ai/",
         match: url => /^https:\/\/claude\.ai\//.test(url)
     },
     {
         name: "Gemini",
+        url: "https://gemini.google.com/",
         match: url => /^https:\/\/gemini\.google\.com\//.test(url)
     },
     {
         name: "DeepAI",
+        url: "https://deepai.org/",
         match: url => /^https:\/\/(www\.)?deepai\.org\//.test(url)
     }
 ];
