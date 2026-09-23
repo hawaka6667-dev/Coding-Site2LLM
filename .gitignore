@@ -1,3 +1,4 @@
 *.crx
-.build/
-.keys/
+.build/*
+!.build/
+!.build/package.ps1

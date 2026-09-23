@@ -14,13 +14,13 @@
 
 
 优化
-- 仅做快速最小测试
-- 发给 LLM 内容不包含图片媒体。
-- 日常chrome直接attach调试（见「Adapter 架构验证」）
-- 修改后自动 Reload 扩展（agent）
+- 快速最小测试
+- 发给 LLM 的内容           兜底源码     不含图片媒体
+- attach调试的日常chrome
+- agent自动 Reload 扩展
 
 - Exercism：`Ctrl+Enter` 提交
-- Exercism: overview 新题目直接进编辑页、自动Mark as complete
+- Exercism: 更快overview 
 
 
 
@@ -33,7 +33,7 @@
 自动打包扩展、明确内外扩展文件夹边界，反对flat管理
 
 /维护
-寻找社区issue然后过去发帖    包括但不限于国内外
+寻找社区issue然后过去发帖    
 自动爬取git issue维护 No newline at end of file No newline at end of file
 adapter 维护专用诊断工具：scripts/check-adapters.js，防止官网更新导致抓取失效
 开启mcp调试，仍然需要到网页手动按确认

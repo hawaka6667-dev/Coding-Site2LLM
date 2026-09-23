@@ -42,6 +42,49 @@ function loadWorker() {
     return context;
 }
 
+function loadKeyboardShortcuts() {
+    const listeners = [];
+    const context = vm.createContext({
+        chrome: { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: () => {} } },
+        document: { addEventListener: (type, listener) => listeners.push({ type, listener }) },
+        location: { hostname: "example.com" }
+    });
+    vm.runInContext(
+        fs.readFileSync(path.join(ROOT_DIR, "worker", "keyboard_shortcuts.js"), "utf8"),
+        context
+    );
+    return { context, listeners };
+}
+
+test("supports Alt and Shift in shortcut matching", () => {
+    const { context } = loadKeyboardShortcuts();
+
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ key: 'q', code: 'KeyQ', ctrlKey: false, altKey: true, shiftKey: true, metaKey: false }, 'Alt+Shift+Q')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ key: 'œ', code: 'KeyQ', ctrlKey: false, altKey: true, shiftKey: false, metaKey: false }, 'Alt+Q')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ key: 'Q', code: 'KeyQ', ctrlKey: false, altKey: false, shiftKey: true, metaKey: false }, 'Shift+Q')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ key: ',', code: 'Comma', ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }, 'Ctrl+,')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ key: '；', code: 'Semicolon', ctrlKey: false, altKey: true, shiftKey: false, metaKey: false }, 'Alt+；')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ key: '+', code: 'Equal', ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }, 'Ctrl++')",
+        context
+    ), true);
+});
+
 test("assembles title, description, feedback, and source", () => {
     const context = loadWorker();
     const prompt = vm.runInContext(
@@ -154,7 +197,7 @@ test("returns without replacing code when no LLM copy happened", async () => {
     );
 });
 
-test("persists the Alt+Q return route in durable extension storage", async () => {
+test("persists the default Alt+Q return route in durable extension storage", async () => {
     const context = loadWorker();
     const stored = {};
     context.chrome.storage = {

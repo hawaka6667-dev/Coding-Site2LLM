@@ -1,5 +1,4 @@
 # Coding Site2LLM
-
 > 官方技术文档 / POC 技术说明书 / Spec
 
 这份文档的用途不是记录每一次开发过程，而是让两类读者快速恢复状态：
@@ -34,6 +33,7 @@ Coding Site2LLM 是一个 Chrome 扩展。它从在线编程网站的当前题�
 2. 每个编程网站使用独立 adapter。网站路由、题目内容、编辑器和测试反馈都由对应站点负责提取。
 3. 只传输对解决当前题目有用的内容：题目、代码、语言和测试反馈；过滤 editorial、SEO/meta 文本、媒体和性能排名噪声。
 4. Exercism 的提交辅助是扩展自己的页面自动化，不是 Exercism 原生功能。
+5. 其它 HTTP(S) 网页使用 `activeTab` 读取当前页面的原始响应源码，作为 Ctrl+U 源码兜底；`view-source:` 页面本身仍拒绝处理。
 
 当前支持或已接入的站点包括 Exercism、LeetCode 和 Codewars；LLM 目标包括 DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等，具体配置以 `background.js` 为准。
 
@@ -50,8 +50,8 @@ URL 路由：选择站点 adapter
    ↓
 
 LLM 页面：等待用户操作
-   ├─ 未发生复制：Alt+Q 直接回到原 code Tab
-   └─ 发生过复制：Alt+Q 回到原 code Tab，回填复制文本并提交
+   ├─ 未发生复制：默认快捷键 Alt+Q 直接回到原 code Tab
+   └─ 发生过复制：默认快捷键 Alt+Q 回到原 code Tab，回填复制文本并提交
                     ├─ Exercism：用户 Run Tests / LLM 回填 → 等待 Submit 可用 → Submit
                     └─ 其它站点：兼容路径派发 Ctrl+Enter
 ```
@@ -126,12 +126,76 @@ Exercism 专属脚本集中在 `worker/exercism/`：只跑 overview 页的脚本
 
 - 该开关是**临时性质**：用来决定正式版是否保留这个跳转行为，删掉时只需移除判断和 popup 里对应控件。
 - 设置变化通过 `chrome.storage.onChanged` 即时生效，不必刷新已打开的页面。
-- 注意 side effect：`default_popup` 会接管图标点击，`chrome.action.onClicked` 不再触发。因此发送上下文改由 popup 按钮或 `Alt+Q` 触发；`chrome.action.onClicked` 监听器保留但处于休眠状态，删掉 popup 即可恢复原来的单击发送。
+- 注意 side effect：`default_popup` 会接管图标点击，`chrome.action.onClicked` 不再触发。因此发送上下文改由 popup 按钮或快捷键触发；快捷键在 Options 页面中修改，而不是在 Chrome 的扩展快捷键设置中修改。`chrome.action.onClicked` 监听器保留但处于休眠状态，删掉 popup 即可恢复原来的单击发送。
 - popup 的 `LLM provider` 下拉框使用 `selectedLlmProvider` 保存选择，默认值是 `DeepSeek`。发送上下文时只查找所选 provider 的已有标签页；找不到时在当前窗口创建该 provider 的标签页，不会因为附近存在其它 LLM 标签页而改用其它 provider。
-- 从 code 页用 `Alt+Q` 成功发送后，扩展记录来源 code Tab 和目标 LLM Tab。LLM 页再次按 `Alt+Q` 总是回到来源 Tab：如果本次 LLM 页面没有发生过 `copy` 事件，默认只回跳；如果 LLM 的复制按钮没有派发 DOM `copy` 事件，则读取当前剪贴板，并且只有内容看起来像代码时才回填，避免把遗留的普通文本误提交。明确记录到的复制文本优先使用。
-- 这条来源/目标路由持久保存在 `chrome.storage.local`（同时写入 session storage），所以 service worker 被回收或扩展重启后，`Alt+Q` 循环仍能恢复。
+- Options 页面提供 `Ice Cyan`、`Warm Ivory`、`Mint` 和 `Lemon` 四种浅色 icon skin，选择保存在 `iconTheme`，由 service worker 即时更新工具栏图标；默认值是 `ice-cyan`。
+- `send-context` 和 `smart-return` 的默认快捷键都由 Options 页面直接保存到 `codingSite2LlmShortcuts`，默认都是 `Alt+Q`。快捷键采用 Immersive Translate 式输入框：聚焦后按 `Ctrl`、`Alt`、`Shift` 或 `Meta` 加一个非空白可打印字符即可修改，例如 `Ctrl+,`、`Alt+.`、`Shift+/` 或全角标点，也可以 Remove 或恢复 Default；不依赖 Chrome 原生快捷键管理页。coding 页只匹配 `send-context`，LLM 页只匹配 `smart-return`，由 `worker/keyboard_shortcuts.js` 转发给 service worker。旧版 `run-workflow` 配置会在读取时兼容迁移。
+- 从 code 页用默认快捷键 `Alt+Q` 成功发送后，扩展记录来源 code Tab 和目标 LLM Tab。LLM 页再次按当前快捷键总是回到来源 Tab：如果本次 LLM 页面没有发生过 `copy` 事件，默认只回跳；如果 LLM 的复制按钮没有派发 DOM `copy` 事件，则读取当前剪贴板，并且只有内容看起来像代码时才回填，避免把遗留的普通文本误提交。明确记录到的复制文本优先使用。
+- 这条来源/目标路由持久保存在 `chrome.storage.local`（同时写入 session storage），所以 service worker 被回收或扩展重启后，快捷键循环仍能恢复。
 
 这些行为属于扩展自己的自动化；页面结构变化时，应通过真实页面重新验证，不应假设 Exercism 提供稳定的内部 API。
+
+## 5.2 快捷键技术链与参考项目
+
+快捷键不是 Chrome 原生 `commands`，而是扩展支持页面里的 page-local bridge。原因是 Chrome 的原生快捷键可以由用户在扩展管理页修改，但 Options 页面不能可靠地把它当作普通设置写入；本项目需要让两个动作共享默认键位、分别编辑，并且按当前页面决定动作。
+
+当前技术链如下：
+
+```text
+Options 页面
+   ↓ 聚焦 readonly input，捕获 keydown
+   ↓ 验证修饰键 + 一个非空白可打印字符，格式化为 Ctrl/Alt/Shift/Meta+Key
+chrome.storage.local: codingSite2LlmShortcuts
+   ├─ send-context: 默认 Alt+Q
+   └─ smart-return: 默认 Alt+Q
+   ↓
+支持页面注入 worker/keyboard_shortcuts.js
+   ↓ 读取当前页面对应的动作配置
+   ├─ coding host: send-context
+   └─ LLM host: smart-return
+   ↓ chrome.runtime.sendMessage({ type: "keyboard-shortcut", command })
+service worker: worker/run_coding_context_to_llm_workflow.js
+   ├─ send-context → runWorkflow()
+   └─ smart-return → returnToCodingPage(tab)
+```
+
+配置层和执行层必须保持分离：`send-context` / `smart-return` 是稳定的动作名，`Alt+Q` 只是可替换的输入绑定。这样可以让两个动作暂时使用同一个键，也可以以后分别改成不同键，而不需要改 workflow 逻辑。Popup 只读取 `send-context` 显示快捷键，并监听 `chrome.storage.onChanged`；Options 的 Reset 同时恢复两个动作。旧版 `run-workflow` 配置只作为读取时的迁移来源，保存后不再写回旧键。
+
+实现和排错时按这条顺序检查：
+
+1. Options 是否显示两个动作，并且每个 input、Remove、Default 的 id 与动作名一致。
+2. `codingSite2LlmShortcuts` 是否只包含两个受支持动作；修改一个动作不能覆盖另一个动作。
+3. coding 页和 LLM 页是否分别加载 `keyboard_shortcuts.js`，并且只匹配当前页面对应的动作。
+4. `keydown` 是否在保存完成后再失焦，是否阻止重复触发和页面默认行为。
+5. service worker 是否收到正确的 `command`，再检查 `runWorkflow` 或 `returnToCodingPage` 本身。
+6. reload 未打包扩展后刷新已有 coding/LLM 页面；旧页面里的 content script 不会自动获得新的扩展上下文。
+
+### 参考一：Immersive Translate
+
+[Immersive Translate 官网](https://immersivetranslate.com/) 和其 [GitHub 发布仓库](https://github.com/immersive-translate/immersive-translate)适合作为交互参考：快捷键输入框应该是一个明确的编辑状态，用户聚焦后直接按键，界面给出保存、清除、恢复默认和错误反馈；修改快捷键不应要求用户理解 Chrome 的扩展快捷键管理页。该仓库当前主要用于发布和反馈，公开仓库不包含完整产品源码，因此这里只借鉴交互与配置体验，不复制实现代码。
+
+对本项目的具体借鉴：
+
+- 用 action label 区分“发送上下文”和“返回 coding 页”，不要把两个行为只写成一个含糊的 `run-workflow`。
+- 输入框默认只读，进入焦点后捕获组合键，Escape 取消，保存完成后再退出编辑状态。
+- 每个动作拥有自己的 Remove 和 Default；Reset defaults 是全局恢复，不应只恢复普通设置。
+- 任何显示快捷键的入口都从同一个 storage key 读取，避免 Popup、Options 和实际监听器各自维护默认值。
+
+### 参考二：Godot Input Map
+
+Godot 的 [Using InputEvent](https://docs.godotengine.org/en/stable/tutorials/inputs/inputevent.html) 和 [InputMap 类文档](https://docs.godotengine.org/en/stable/classes/class_inputmap.html)提供了更适合长期演进的抽象：代码使用动作名，动作再映射到一个或多个输入事件。动作可以在项目设置中配置，也可以运行时重映射；输入事件本身不应散落在业务逻辑里。
+
+对应到本项目：
+
+| Godot 概念 | Coding Site2LLM 概念 |
+| --- | --- |
+| action name | `send-context` / `smart-return` |
+| input event | `Alt+Q`、`Ctrl+D` 等格式化快捷键字符串 |
+| InputMap | `codingSite2LlmShortcuts` storage 对象 |
+| `Input.is_action_pressed()` | 页面 bridge 根据当前 host 匹配动作并发送 runtime message |
+| Project Settings / runtime remap | Options 页面保存、删除、恢复默认 |
+
+Godot 还允许同一个 action 绑定多个输入；这是本项目后续支持备用快捷键时的自然方向。当前先保持每个动作一个字符串，避免引入不必要的冲突解决 UI；如果将来需要多个绑定，应把值升级为数组，并明确“同一页面、同一事件只触发一次”的去重规则。
 
 仓库反馈管理：当前待处理的截图、记录和说明放在 `.feedback/`；某条反馈对应的问题完成并验证后，移动到 `.feedback/old/`，不要删除原始反馈文件。未完成的反馈继续留在顶层，避免把 backlog 误归档。
 

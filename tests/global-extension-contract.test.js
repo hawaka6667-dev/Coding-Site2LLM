@@ -18,7 +18,7 @@ function readManifest() {
 test("keeps extension commands and content scripts registered", () => {
     const manifest = readManifest();
 
-    assert.equal(manifest.commands["run-workflow"].suggested_key.default, "Alt+Q");
+    assert.equal(manifest.commands, undefined);
     assert.deepEqual(manifest.options_ui, {
         page: "options/options.html",
         open_in_tab: true
@@ -34,7 +34,7 @@ test("keeps extension commands and content scripts registered", () => {
             "worker/exercism/auto_mark_exercise_complete.js"
         ]
     );
-    assert.equal(manifest.commands["exercism-test-submit"], undefined);
+    assert.equal(manifest.commands?.["exercism-test-submit"], undefined);
 });
 
 test("keeps the general options page wired to implemented Exercism features", () => {
@@ -58,6 +58,16 @@ test("keeps the general options page wired to implemented Exercism features", ()
 
     assert.match(optionsHtml, /<section aria-labelledby="exercism-heading">/);
     assert.match(optionsHtml, /<section aria-labelledby="llm-heading">/);
+    assert.match(optionsHtml, /id="shortcut-send-context"/);
+    assert.match(optionsHtml, /id="shortcut-smart-return"/);
+    assert.match(optionsSource, /codingSite2LlmShortcuts/);
+    assert.match(optionsSource, /keydown/);
+    assert.match(optionsSource, /send-context/);
+    assert.match(optionsSource, /smart-return/);
+    assert.match(optionsSource, /DEFAULT_SHORTCUTS/);
+    assert.match(optionsHtml, /data-icon-theme/);
+    assert.match(optionsSource, /iconTheme/);
+    assert.match(fs.readFileSync(path.join(ROOT_DIR, "background.js"), "utf8"), /manage_icon_theme\.js/);
 });
 
 test("keeps the popup toggle wired to the Exercism redirect setting", () => {
@@ -82,6 +92,7 @@ test("keeps the popup toggle wired to the Exercism redirect setting", () => {
     // The popup lives in its own folder instead of flattening the project root.
     assert.equal(popupPath, "popup/popup.html");
     assert.match(popupHtml, /<script src="popup\.js">/);
+    assert.match(popupHtml, /shortcut: Alt\+Q/);
 
     // The setting is declared next to the behaviour it controls; the popup must
     // read and write that exact key.
@@ -114,6 +125,7 @@ test("keeps the popup LLM provider setting wired to the worker", () => {
     assert.match(popupHtml, /id="llm-provider"/);
     assert.match(popupHtml, /<option value="DeepSeek">DeepSeek<\/option>/);
     assert.match(popupSource, /"selectedLlmProvider"/);
+    assert.match(popupSource, /codingSite2LlmShortcuts/);
     assert.match(popupSource, /DEFAULT_LLM_PROVIDER = "DeepSeek"/);
     assert.match(workflowSource, /"selectedLlmProvider"/);
 

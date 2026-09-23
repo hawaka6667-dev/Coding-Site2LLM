@@ -324,26 +324,23 @@ chrome.action.onClicked.addListener(async () => {
     }
 });
 
-chrome.commands.onCommand.addListener(async (command, tab) => {
-    try {
-        if (command === "run-workflow") {
-            const currentTab = tab || (await chrome.tabs.query({
-                active: true,
-                currentWindow: true
-            }))[0];
-
-            if (currentTab && isLlmUrl(currentTab.url)) {
-                await returnToCodingPage(currentTab);
-            } else {
-                await runWorkflow();
-            }
-        }
-    } catch (error) {
-        console.error("[workflow] ERROR:", error);
-    }
-});
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "keyboard-shortcut") {
+        const tab = sender.tab;
+        const command = message.command;
+
+        (async () => {
+            if (command === "send-context") {
+                await runWorkflow();
+            } else if (command === "smart-return" && tab) {
+                await returnToCodingPage(tab);
+            }
+        })().catch(error => {
+            console.error("[workflow] ERROR:", error);
+        });
+        return;
+    }
+
     if (message?.type === "run-workflow") {
         // The popup owns the send button, so it needs the outcome back.
         runWorkflow()

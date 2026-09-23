@@ -9,7 +9,8 @@
   "permissions": [
     "tabs",
     "scripting",
-    "storage"
+    "storage",
+    "activeTab"
   ],
   "host_permissions": [
     "https://exercism.org/*",
@@ -65,7 +66,21 @@
         "https://deepai.org/*"
       ],
       "js": [
-        "worker/llm_copy_tracker.js"
+        "worker/llm_copy_tracker.js",
+        "worker/keyboard_shortcuts.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://exercism.org/*",
+        "https://leetcode.com/*",
+        "https://codewars.com/*",
+        "https://www.codewars.com/*",
+        "https://cr.codewars.com/*"
+      ],
+      "js": [
+        "worker/keyboard_shortcuts.js"
       ],
       "run_at": "document_start"
     }
@@ -78,14 +93,6 @@
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
-    }
-  },
-  "commands": {
-    "run-workflow": {
-      "suggested_key": {
-        "default": "Alt+Q"
-      },
-      "description": "Send coding-site context to an LLM"
     }
   }
 }

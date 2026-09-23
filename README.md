@@ -14,9 +14,7 @@ A Chrome extension that captures coding-site context from Exercism, LeetCode, an
 1. Open `chrome://extensions/`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
-4. Select this project folder.
-
-5. or download release
+4. Pin the extension to the Chrome toolbar for quick access.
 
 ## License
 

@@ -7,14 +7,28 @@ const EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_SETTING_KEY =
     "exercismOpenNewExerciseInEditor";
 const SELECTED_LLM_PROVIDER_KEY = "selectedLlmProvider";
 const DEFAULT_LLM_PROVIDER = "DeepSeek";
+const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
+const DEFAULT_SEND_CONTEXT_SHORTCUT = "Alt+Q";
 
 const toggle = document.getElementById("exercism-open-new-exercise-in-editor");
 const providerSelect = document.getElementById("llm-provider");
 const sendButton = document.getElementById("send-context");
-const optionsButton = document.getElementById("open-options");
 const status = document.getElementById("status");
 
 let statusTimer = 0;
+
+async function renderShortcut() {
+    const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
+    const shortcuts = stored[SHORTCUTS_KEY] || {};
+    const value = shortcuts["send-context"] || shortcuts["run-workflow"] || DEFAULT_SEND_CONTEXT_SHORTCUT;
+    sendButton.textContent = `Send context to LLM (shortcut: ${value})`;
+}
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && changes[SHORTCUTS_KEY]) {
+        renderShortcut().catch(() => {});
+    }
+});
 
 function showStatus(text, sticky = false) {
     status.textContent = text;
@@ -83,9 +97,6 @@ sendButton.addEventListener("click", async () => {
     }
 });
 
-optionsButton.addEventListener("click", () => {
-    chrome.runtime.openOptionsPage();
-});
-
 renderToggle();
 renderProvider();
+renderShortcut();

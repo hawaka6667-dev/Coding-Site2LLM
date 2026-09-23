@@ -4,6 +4,7 @@ role: service-worker entry; load modules and register runtime
 contract: preserve import order; later files consume earlier globals
 */
 importScripts(
+    "worker/manage_icon_theme.js",
     "worker/configure_supported_coding_sites_and_llm_providers.js",
     "worker/inject_scripts_and_control_coding_page.js",
     "worker/extract_coding_site_context_with_site_adapters.js",

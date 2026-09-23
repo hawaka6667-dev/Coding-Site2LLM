@@ -2,7 +2,7 @@
   "name": "coding-site2llm",
   "private": true,
   "scripts": {
-    "package:crx": "powershell -ExecutionPolicy Bypass -File build/package-crx.ps1",
+    "package:crx": "powershell -ExecutionPolicy Bypass -File .build/package.ps1",
     "test": "npm run test:unit",
     "test:unit": "node --test tests/minimal-core-feature.test.js",
     "test:routing": "node --test tests/local-routing.test.js",

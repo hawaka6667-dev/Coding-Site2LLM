@@ -671,6 +671,36 @@ const CodewarsAdapter = {
     }
 };
 
+const SourceFallbackAdapter = {
+
+    name: "Web source",
+
+    match(url) {
+        return /^https?:\/\//.test(url);
+    },
+
+    async getContext(tabId) {
+        const value = await executePage(tabId, async () => {
+            const response = await fetch(location.href, {
+                credentials: "include"
+            });
+
+            return {
+                title: document.title.trim() || location.href,
+                source: await response.text()
+            };
+        });
+
+        return {
+            platform: this.name,
+            title: value.title,
+            description: "",
+            source: value.source,
+            feedback: ""
+        };
+    }
+};
+
 const ExercismOverviewAdapter = {
 
     name: "Exercism overview",

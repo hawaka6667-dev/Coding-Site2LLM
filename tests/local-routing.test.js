@@ -52,18 +52,17 @@ test("routes supported exercise pages to their adapters", () => {
     }));
 });
 
-test("rejects unsupported, unrelated, and view-source pages", () => {
+test("falls back to raw source for unrelated HTTP pages and rejects view-source pages", () => {
     const context = loadWorker();
 
-    for (const url of [
-        "https://example.com/",
-        "https://www.codewars.com/users/example"
-    ]) {
-        assert.throws(
-            () => vm.runInContext(`getPlatform('${url}')`, context),
-            /not a supported coding exercise page/
-        );
-    }
+    assert.equal(
+        vm.runInContext("getPlatform('https://example.com/').name", context),
+        "Web source"
+    );
+    assert.equal(
+        vm.runInContext("getPlatform('https://www.codewars.com/users/example').name", context),
+        "Web source"
+    );
 
     assert.throws(
         () => vm.runInContext(

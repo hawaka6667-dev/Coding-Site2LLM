@@ -82,6 +82,43 @@
             background: var(--panel);
         }
 
+        .icon-theme-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .icon-theme {
+            display: grid;
+            justify-items: center;
+            gap: 6px;
+            padding: 10px 6px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .icon-theme:has(input:checked) {
+            border-color: var(--button);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--button) 24%, transparent);
+        }
+
+        .icon-theme input {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .icon-theme img {
+            width: 64px;
+            height: 64px;
+        }
+
+        .icon-theme span {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .section-description {
             margin-bottom: 14px;
         }
@@ -116,6 +153,53 @@
             margin-top: 2px;
         }
 
+        .shortcut-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .shortcut-row {
+            display: grid;
+            grid-template-columns: 1fr minmax(210px, auto);
+            gap: 16px;
+            align-items: center;
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .shortcut-controls {
+            display: grid;
+            grid-template-columns: 150px auto auto;
+            gap: 6px;
+            align-items: start;
+        }
+
+        .shortcut-key {
+            width: 150px;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: transparent;
+            color: inherit;
+            text-align: center;
+            font: 600 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+
+        .shortcut-button {
+            padding: 6px 8px;
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .shortcut-error {
+            margin: 4px 0 0;
+            color: #b3261e;
+            font-size: 12px;
+        }
+
         .actions {
             display: flex;
             align-items: center;
@@ -148,6 +232,12 @@
             min-height: 21px;
             margin: 0;
             color: var(--muted);
+        }
+
+        @media (max-width: 520px) {
+            .icon-theme-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
     </style>
 </head>
@@ -191,6 +281,62 @@
         <section aria-labelledby="llm-heading">
             <h2 id="llm-heading">LLM</h2>
             <p class="section-description">The popup keeps the provider selector for fast changes.</p>
+
+            <div class="setting shortcut-setting">
+                <span>
+                    <span class="label">Keyboard shortcuts</span>
+                    <span id="shortcut-detail" class="detail">Click the shortcut field, then press Ctrl, Alt, or Meta plus a letter or number.</span>
+                </span>
+            </div>
+
+            <div class="shortcut-list" aria-live="polite">
+                <div class="shortcut-row">
+                    <span>Send context to LLM</span>
+                    <span class="shortcut-controls">
+                        <input id="shortcut-send-context" class="shortcut-key" type="text" readonly placeholder="Press keys">
+                        <button id="shortcut-send-context-remove" class="shortcut-button" type="button">Remove</button>
+                        <button id="shortcut-send-context-reset" class="shortcut-button" type="button">Default</button>
+                        <span id="shortcut-send-context-error" class="shortcut-error" role="alert"></span>
+                    </span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Smart return to coding page</span>
+                    <span class="shortcut-controls">
+                        <input id="shortcut-smart-return" class="shortcut-key" type="text" readonly placeholder="Press keys">
+                        <button id="shortcut-smart-return-remove" class="shortcut-button" type="button">Remove</button>
+                        <button id="shortcut-smart-return-reset" class="shortcut-button" type="button">Default</button>
+                        <span id="shortcut-smart-return-error" class="shortcut-error" role="alert"></span>
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <section aria-labelledby="icon-heading">
+            <h2 id="icon-heading">Icon skin</h2>
+            <p class="section-description">Choose the light accent used by the extension toolbar icon.</p>
+
+            <div class="icon-theme-grid" role="radiogroup" aria-label="Icon skin">
+                <label class="icon-theme">
+                    <input type="radio" name="iconTheme" value="ice-cyan" data-icon-theme>
+                    <img src="../icons/icon-theme-ice-cyan-64.png" alt="">
+                    <span>Ice Cyan</span>
+                </label>
+                <label class="icon-theme">
+                    <input type="radio" name="iconTheme" value="warm-ivory" data-icon-theme>
+                    <img src="../icons/icon-theme-warm-ivory-64.png" alt="">
+                    <span>Warm Ivory</span>
+                </label>
+                <label class="icon-theme">
+                    <input type="radio" name="iconTheme" value="mint" data-icon-theme>
+                    <img src="../icons/icon-theme-mint-64.png" alt="">
+                    <span>Mint</span>
+                </label>
+                <label class="icon-theme">
+                    <input type="radio" name="iconTheme" value="lemon" data-icon-theme>
+                    <img src="../icons/icon-theme-lemon-64.png" alt="">
+                    <span>Lemon</span>
+                </label>
+            </div>
         </section>
     </main>
 

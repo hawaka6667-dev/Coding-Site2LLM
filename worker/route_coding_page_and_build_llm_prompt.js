@@ -8,7 +8,8 @@ const PLATFORMS = [
     ExercismAdapter,
     ExercismOverviewAdapter,
     LeetCodeAdapter,
-    CodewarsAdapter
+    CodewarsAdapter,
+    SourceFallbackAdapter
 ];
 
 function cleanLeetCodeDescription(text) {
@@ -38,13 +39,7 @@ function getPlatform(url) {
     const normalizedUrl = pageUrl(url);
     const platform = PLATFORMS.find(item => item.match(normalizedUrl));
 
-    if (!platform) {
-        throw new Error(
-            "Current page is not a supported coding exercise page."
-        );
-    }
-
-    return platform;
+    return platform || SourceFallbackAdapter;
 }
 
 function buildPrompt(context) {
