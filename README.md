@@ -6,10 +6,11 @@
 
 ## Install
 
-1. Open `chrome://extensions/`
-2. Enable **Developer mode** and click **Load unpacked**
-3. Pin the extension to the Chrome toolbar for quick access
-
+1. Open `chrome://extensions/`.
+2. Enable **Developer mode**.
+3. Drag and drop the `.crx` file onto the extensions page.
+4. Pin the extension to the Chrome toolbar for quick access
+   
 ## Platform Notes
 
 **Exercism** — I’ve added support for Exercism.
