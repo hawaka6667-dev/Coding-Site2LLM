@@ -1,21 +1,17 @@
-# Intro
-
-A Chrome extension that captures coding-site context from Exercism, LeetCode, and similar platforms and sends it directly to your LLM (DeepSeek, ChatGPT, Claude, Gemini, etc.) with one click.
-
 ## Features
 
+- 🌐 Support for coding practice platforms such as Exercism, LeetCode, Codewars, HackerRank, Codeforces, AtCoder, and more
 - 🎯 One-click send: `Alt+Q` or click the extension button
-- 🌐 Support for Exercism and LeetCode, with extensibility for more sites
 - 🤖 Works with DeepSeek, ChatGPT, Claude, Gemini, and DeepAI
-- ⚡ Captures coding context and inserts it into the active LLM tab
 
 ## Install
 
-1. Open `chrome://extensions/`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Pin the extension to the Chrome toolbar for quick access.
+1. Open `chrome://extensions/`
+2. Enable **Developer mode** and click **Load unpacked**
+3. Pin the extension to the Chrome toolbar for quick access
 
-## License
+## Platform Notes
 
-MIT License
+**Exercism** — I’ve added support for Exercism.
+
+**LeetCode** — I recommend [LeetSense](https://chromewebstore.google.com/detail/leetsense-vs-code-like-au/pncodgcbfbhlmggfokamdcgkoknbphoi), which provides VS Code-like autocomplete and IntelliSense directly in the LeetCode editor.
