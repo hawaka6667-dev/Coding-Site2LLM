@@ -236,8 +236,6 @@ providerSelect.addEventListener("change", async () => {
     await chrome.storage.local.set({
         [SELECTED_LLM_PROVIDER_KEY]: providerSelect.value
     });
-
-    showStatus(`LLM: ${providerSelect.value}`);
 });
 
 toggle.addEventListener("change", async () => {

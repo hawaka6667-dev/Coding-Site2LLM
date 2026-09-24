@@ -437,7 +437,10 @@ test("captures Ctrl+Enter in the Exercism editor and sends the submit message", 
         }
     });
     vm.runInContext(
-        fs.readFileSync(path.join(ROOT_DIR, "content.js"), "utf8"),
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "edit", "content.js"),
+            "utf8"
+        ),
         context
     );
     const prevented = [];

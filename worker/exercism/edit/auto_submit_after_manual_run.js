@@ -1,5 +1,5 @@
 /* @machine
-file: worker/exercism/auto_submit_after_manual_run.js
+file: worker/exercism/edit/auto_submit_after_manual_run.js
 role: continue Exercism's manual Run Tests action into Submit
 scope: editor pages only
 */

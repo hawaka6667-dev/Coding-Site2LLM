@@ -1,5 +1,5 @@
 /* @machine
-file: content.js
+file: worker/exercism/edit/content.js
 role: Exercism Ctrl+Enter bridge to service worker
 owns: keyboard capture only; button automation belongs to site adapter
 contract: Chrome commands cannot bind Enter

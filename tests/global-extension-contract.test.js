@@ -25,15 +25,14 @@ test("keeps extension commands and content scripts registered", () => {
         open_in_tab: true
     });
     assert.deepEqual(manifest.content_scripts[0].js, [
-        "content.js",
-        "worker/exercism/auto_submit_after_manual_run.js",
-        "worker/exercism/auto_mark_exercise_complete.js"
+        "worker/exercism/edit/content.js",
+        "worker/exercism/edit/auto_submit_after_manual_run.js"
     ]);
     assert.deepEqual(
         manifest.content_scripts[1].js,
         [
-            "worker/exercism/open_exercise_in_editor.js",
-            "worker/exercism/auto_mark_exercise_complete.js"
+            "worker/exercism/overview/open_exercise_in_editor.js",
+            "worker/exercism/overview/auto_mark_exercise_complete.js"
         ]
     );
     assert.equal(manifest.commands?.["exercism-test-submit"], undefined);
@@ -86,6 +85,7 @@ test("keeps the popup toggle wired to the Exercism redirect setting", () => {
             ROOT_DIR,
             "worker",
             "exercism",
+            "overview",
             "open_exercise_in_editor.js"
         ),
         "utf8"
@@ -148,13 +148,23 @@ test("keeps daily-practice destinations in an extensible popup provider list", (
     assert.deepEqual(providers, [
         {
             id: "leetcode",
-            label: "LeetCode Daily📅",
+            label: "Leet Daily📅",                     //test
             url: "https://leetcode.com/problemset/?envType=daily-question&envId=2026-09-24"
         },
         {
             id: "codewars",
             label: "Codewars",
             url: "https://www.codewars.com/dashboard"
+        },
+        {
+            id: "neetcode-roadmap",
+            label: "Neet Roadmap",
+            url: "https://neetcode.io/roadmap"
+        },
+        {
+            id: "exercism-tracks",
+            label: "Exercism language Track",
+            url: "https://exercism.org/tracks"
         }
     ]);
 });
@@ -197,7 +207,10 @@ test("keeps the popup LLM provider setting wired to the worker", () => {
 });
 
 test("keeps mark-complete separate from Ctrl+Enter submission", () => {
-    const contentSource = fs.readFileSync(path.join(ROOT_DIR, "content.js"), "utf8");
+    const contentSource = fs.readFileSync(
+        path.join(ROOT_DIR, "worker", "exercism", "edit", "content.js"),
+        "utf8"
+    );
     const adapterSource = fs.readFileSync(
         path.join(ROOT_DIR, "worker", "extract_coding_site_context_with_site_adapters.js"),
         "utf8"
@@ -207,6 +220,7 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
             ROOT_DIR,
             "worker",
             "exercism",
+            "overview",
             "auto_mark_exercise_complete.js"
         ),
         "utf8"
@@ -233,7 +247,9 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
 
 test("registers the concepts scroll-restoration script on Exercism concepts pages", () => {
     const conceptsScript = readManifest().content_scripts.find(script =>
-        script.js.includes("worker/exercism/preserve_concepts_scroll_position.js")
+        script.js.includes(
+            "worker/exercism/concepts/preserve_concepts_scroll_position.js"
+        )
     );
 
     assert.deepEqual(conceptsScript.matches, [

@@ -1,98 +1,88 @@
 # Coding Site2LLM
 
-这是一个 Chrome 扩展：从当前 coding site 提取题目上下文，组装 prompt，并把 prompt 交给用户已打开的 LLM 页面。
+这是一个 Chrome extension：从当前 coding site 提取 problem context，组装 prompt，并把 prompt 交给用户已打开的 LLM page。
+以及各种快捷功能
 
-这份文档服务两类读者，内容按这两个入口组织：
+这份文档面向两类读者，内容按这两个入口组织：
 
-- **人**：快速恢复项目上下文，知道下一步改哪里、测什么。
-- **LLM**：恢复技术状态，知道哪些是模块契约，哪些只是实现细节。
+- **人**：快速恢复 project context，知道下一步改哪里、测什么。
+- **LLM**：恢复 technical context，知道哪些是 module contract，哪些只是 implementation detail。
 
 ## A. 给人：快速恢复
 
 ### 项目边界
 
-扩展是上下文传输层，不负责替用户分析、总结或改写题目。
+extension 是 context-transport layer，不负责替用户分析、总结或改写题目。
 
 ### 用户目标优先
 
-所有界面、输入和自动化设计先回答目标用户要完成什么，再选择技术实现。不得把浏览器默认行为、开发者习惯、框架限制或未来扩展计划当作用户目标。用户目标明确后，依次确定任务流程、可接受的输入、错误恢复、产品语言策略，最后才选择原生控件、校验和本地化机制。
+所有 UI、input 和 automation design 先回答 target user 要完成什么，再选择 implementation。不得把 browser default behavior、developer habits、framework constraints 或 future feature plans 当作 user goals。目标明确后，依次确定 user workflow、可接受的 input、error recovery、product language policy，最后才选择 native controls、validation 和 localization mechanism。
 
-当前目标用户是学生和做题者。他们需要在题目、代码编辑器与 LLM 之间快速切换。支持站点、开发者使用的语言和当前网页语言都是实现环境，不能被当作用户画像或界面语言偏好。
+当前 target users 是学生和做题者。他们需要在题目、code editor 与 LLM 之间快速切换。supported coding sites、developer 使用的语言和当前 page language 都是 runtime environment，不能被当作 user persona 或 UI language preference。
 
-当前支持的 coding site：Exercism、LeetCode、Codewars，以及其它 HTTP(S) 页面的原始源码兜底。
+当前支持的 coding sites：Exercism、LeetCode、Codewars，以及其它 HTTP(S) pages 的 raw-source fallback。
 
-当前支持的 LLM：DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等。具体 provider 配置以 `background.js` 为准。
+当前支持的 LLM providers：DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等。具体 provider configuration 以 `background.js` 为准。
 
 ### 日常开发入口
 
-| 要改的行为 | 先看 | 最小验证 |
+| 要改的 behavior | 先看 | 最小 validation |
 | --- | --- | --- |
-| prompt、站点上下文 | `worker/extract_coding_site_context_with_site_adapters.js` | `npm run test:unit` |
-| URL 和站点路由 | `worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
-| Exercism overview 跳转 | `worker/exercism/open_exercise_in_editor.js` | `npm run test:routing` |
-| Exercism 完成确认、concepts 刷新与滚动恢复 | `worker/exercism/auto_mark_exercise_complete.js`, `worker/run_coding_context_to_llm_workflow.js`, `worker/exercism/preserve_concepts_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism 编辑页提交 | `worker/exercism/auto_submit_after_manual_run.js` | `npm run test:contracts` |
-| popup 每日练习入口 | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
-| 扩展注入和 manifest | `manifest.json`, `content.js`, `worker/` | `npm run test:contracts` |
-| 开发环境和文件入口 | `tests/dev-check.ps1`, `package.json`, `manifest.json` | `npm run dev:check` |
+| 要改的 behavior | 先看 | 最小 validation |
+| --- | --- | --- |
+| prompt、site context | `worker/extract_coding_site_context_with_site_adapters.js` | `npm run test:unit` |
+| URL routing 和 site routing | `worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
+| Exercism overview redirect and completion confirmation | `worker/exercism/overview/open_exercise_in_editor.js`, `worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism concepts scroll restoration | `worker/exercism/concepts/preserve_concepts_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism editor bridge and submission | `worker/exercism/edit/content.js`, `worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:contracts` |
+| popup daily-practice entry | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
+| extension injection 和 manifest | `manifest.json`, `worker/` | `npm run test:contracts` |
+| development environment 和 entry points | `tests/dev-check.ps1`, `package.json`, `manifest.json` | `npm run dev:check` |
 
-`dev:check` 的浏览器前置条件来自 Chrome DevTools MCP 的实时 `list_pages`，不是仅凭 Chrome 进程判断。运行 `list_pages` 后，把输出中的页面 URL 和扩展 Service Worker URL 写入新鲜 JSON 快照（格式参考 `tests/chrome-mcp-snapshot.example.json`），至少包含：
-
-```json
-{
-  "schemaVersion": 1,
-  "source": "Chrome DevTools MCP list_pages",
-  "mcpConnected": true,
-  "connectedAt": "当前 UTC ISO 时间",
-  "pages": [{ "url": "页面 URL" }],
-  "extensionServiceWorkers": [{ "url": "chrome-extension://扩展 ID/background.js" }]
-}
-```
-
-快照需在运行前 300 秒内生成；页面列表要包含 Exercism `/edit` 页和 DeepSeek 页面，Service Worker 列表要包含本扩展的 `background.js`。在 PowerShell 设置快照路径后再运行检查：
-
-```powershell
-$env:CHROME_DEVTOOLS_MCP_SNAPSHOT = Join-Path $env:TEMP "coding-site2llm-chrome-mcp-snapshot.json"
-npm run dev:check
-```
-
-不要把带实时页面状态和时间戳的临时快照提交到仓库。
+`dev:check` 检查 repository entry points、manifest 和 Chrome process。浏览器实时状态直接通过 Chrome DevTools MCP 的 `list_pages` 查看；不需要导出、保存或维护快照文件。
 
 ### 标准验证顺序
 
-1. 先运行职责对应的最小测试。
-2. 需要确认页面事实时，使用 Chrome DevTools MCP 探测真实 DOM、路由和编辑器状态。
-3. 修改未打包扩展后运行 `npm run session:end`；测试通过后，它会依次 reload 扩展并刷新已有 coding/LLM 页面。
-4. 配置 `CODING_SITE2LLM_RELOAD_COMMAND` 和 `CODING_SITE2LLM_REFRESH_COMMAND`，分别指向可执行的外部 Chrome/MCP bridge 命令；两项缺失时脚本会在浏览器操作前停止。
-5. reload 扩展后必须刷新已有 coding/LLM 页面；旧 content script 的 extension context 已失效。
-5. 需要用户点击页面按钮时，明确提醒用户确认；不要用猜测的坐标代替确认。
-6. 测试完页面后，默认刷新一下页面，不留残余。
+1. 先运行与改动职责对应的 smallest relevant test。
+2. 需要确认 page behavior 时，使用 Chrome DevTools MCP 检查真实 DOM、routing 和 editor state。
+3. 修改 unpacked extension 后运行 `npm run session:end`；tests 通过后，它会依次 reload extension 并 refresh 已打开的 coding/LLM tabs。
+4. 配置 `CODING_SITE2LLM_RELOAD_COMMAND` 和 `CODING_SITE2LLM_REFRESH_COMMAND`，分别指向可执行的外部 Chrome/MCP bridge commands；任一 command 缺失时，script 会在 browser operation 前停止。
+5. 修改并 reload extension 后必须 refresh 已打开的 coding/LLM tabs。只 reload extension 不会重新注入已有页面的 content script；旧脚本的 extension context 已失效，快捷键或 Exercism auto-submit 可能静默失效。刷新前先确认页面编辑内容已保存。
+6. 需要用户点击 UI control 时，明确提醒用户确认；不要用猜测的 coordinates 代替确认。
+7. 页面验证结束后，默认 refresh 页面并清理临时状态。
 
-纯文档、测试和修复不递增版本。新增功能默认递增补丁版本 `0.01`，并重新打包到对应的 `.build/v<version>/`。
+### 测试挂起与超时防护
+
+- 新增或修改 asynchronous tests 时，检查每个 pending Promise 在 test path 上都能 resolve 或 reject；VM/iframe 等 isolated context 使用的 callbacks 和 resolvers 必须显式注入，避免 error 被异步捕获后 test 仍无限等待。
+- 怀疑 Node test hang 时先单独运行，并启用 test-level timeout，例如 `node --test --test-timeout=10000 tests/fast-core-feature.test.js`；不要为了排查直接运行 `test:all`。
+- timeout 用来发现 test 未完成，不等同于证明存在 infinite loop。Synchronous infinite loop 会 block event loop，应使用 external process-level timeout 并检查 CPU usage；pending async Promise 通常表现为 test timeout 或进程仍有 active handles。
+- 断言 VM 等 cross-realm values 时，比较明确 fields，或先转换为 host-realm plain objects，避免 prototype mismatch 造成误报。
+
+Documentation-only changes, tests, and bug fixes do not increment the version. By default, new features increment the patch version by `0.01`; package releases to `.build/v<version>/`.
 
 ### 浏览器探测原则
 
-MCP 是调试探针，不是生产依赖。先观察真实运行时，再修改 adapter 或页面脚本。
+MCP 是 debugging probe，不是 production dependency。先观察 live runtime，再修改 adapter 或 page script。
 
 推荐探测顺序：
 
 ```text
-真实页面
+live page
   -> list_pages
-  -> evaluate_script 读取 URL、DOM、编辑器和页面状态
-  -> 修改所属模块
-  -> 最小测试
+  -> evaluate_script 检查 URL、DOM、editor 和 page state
+  -> 修改 owning module
+  -> smallest relevant test
   -> reload_extension
-  -> 刷新页面复核
+  -> refresh page 并复核
 ```
 
-`list_console_messages` 不足以观察 content script 的异常。需要确认 content script 是否运行时，用页面 `sessionStorage` 写入探针，再从页面主世界读取；不要用会在同源 tab 间串数据的 `localStorage`。
+`list_console_messages` 无法完整观察 content script errors。需要确认 content script 是否运行时，从 page context 写入 `sessionStorage` probe，再从 page main world 读取；不要使用会在 same-origin tabs 间共享数据的 `localStorage`。
 
 ### 当前开发边界
 
-不做通用跨网站编辑器抓取器，不在扩展内生成解题内容，不把 MCP 脚本作为生产运行时依赖。
+不做 generic cross-site editor scraper，不在 extension 内生成 solution content，不把 MCP scripts 作为 production runtime dependencies。
 
-popup 的每日练习入口由 `popup/daily_practice_providers.js` 的 provider 列表驱动。LeetCode 使用当天 UTC 日期构造 Daily Question 页面；Codewars 直接打开 dashboard。新增站点时只需添加 provider 配置，并扩展对应的 contract test。
+popup 的 daily-practice entry 由 `popup/daily_practice_providers.js` 的 provider list 驱动。LeetCode 使用当天 UTC date 构造 Daily Question page；Codewars 直接打开 dashboard。新增 coding site 时只需添加 provider configuration，并扩展对应的 contract test。
 
 ### Popup 输入与语言规范
 
@@ -214,6 +204,15 @@ feedback
 
 只传输当前题目有用的信息。过滤 editorial、SEO/meta 文本、媒体、性能排名等噪声。
 
+### Exercism 页面测试原则
+
+所有 Exercism 页面相关测试都应提供 `state-transition coverage`：从明确的 `initial state` 开始，经过页面的真实 `production flow` 和中间状态转移，最终断言 `terminal state` 及必要的 `side effects`。按 `initial state -> actions/intermediate states -> terminal state` 组织测试，不以单独断言 selector 命中、message payload、function return value 或 source structure 代替完整流程验证。
+
+- 覆盖用户可观察的关键状态转换，例如 `available -> /edit -> started`、`iterated -> Mark as complete -> Confirm -> completed`，以及编辑页 `Run Tests -> Submit -> iterated`。
+- 可以 stub 外部的 DOM、timing 和 Chrome API boundaries，但必须运行实际的 page script、service-worker message listener 和 adapter，也就是该用例的 `system under test (SUT)`；不能 mock 掉正在验证的状态转换环节。
+- 断言 `terminal state`，并检查与该流程直接相关的 `side effects`；只保留保护不同状态转换、failure boundaries 或 stable contracts 的测试。多个测试重复覆盖同一流程时，应合并为清晰的 state scenario，避免堆叠 implementation-detail tests。
+- 实际 DOM 和 routing behavior 需要通过浏览器 MCP 探测；模拟测试用于验证 production flow，不能称作真实浏览器 `end-to-end (E2E) test`。
+
 ### 测试命令
 
 ```powershell
@@ -226,7 +225,7 @@ npm run session:end     # 测试通过后 reload 扩展并刷新已有 coding/LL
 
 禁止在日常开发、功能修改和提交前验证中运行 `npm run test:all`。全量测试耗时过长；必须先从 `tests/` 中按改动职责选择最小覆盖测试，并优先使用对应的 `test:unit`、`test:routing` 或 `test:contracts`。只有用户明确要求全量测试时才可运行 `test:all`。
 
-最小回归必须覆盖：支持站点路由、恶意/不支持 URL、prompt 过滤、Exercism `available/started/iterated/completed` 状态、`Exercise Solved` 终态、编辑页提交链和完成确认链。
+最小回归必须覆盖：支持站点路由、恶意/不支持 URL、prompt 过滤，以及 Exercism 各关键页面流程的状态闭环（`available/started/iterated/completed`、`Exercise Solved`、编辑页提交链、overview 完成确认链）。
 
 ### 关键维护规则
 

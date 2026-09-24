@@ -4,12 +4,6 @@
 # role: check development prerequisites at startup or at any point during development
 # contract: report whether the current environment is ready; never starts the development server
 
-param(
-    [string]$McpSnapshot = $env:CHROME_DEVTOOLS_MCP_SNAPSHOT,
-    [string]$ExtensionId = $env:CODING_SITE2LLM_EXTENSION_ID,
-    [int]$SnapshotMaxAgeSeconds = 300
-)
-
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
@@ -39,7 +33,7 @@ try {
 
 $requiredFiles = @(
     "background.js",
-    "content.js",
+    "worker/exercism/edit/content.js",
     "popup/popup.html",
     "popup/popup.js",
     "popup/daily_practice_providers.js",
@@ -47,13 +41,12 @@ $requiredFiles = @(
     "options/options.js",
     "worker/llm_copy_tracker.js",
     "worker/configure_supported_coding_sites_and_llm_providers.js",
-    "worker/exercism/open_exercise_in_editor.js",
-    "worker/exercism/auto_mark_exercise_complete.js",
-    "worker/exercism/auto_submit_after_manual_run.js",
+    "worker/exercism/overview/open_exercise_in_editor.js",
+    "worker/exercism/overview/auto_mark_exercise_complete.js",
+    "worker/exercism/edit/auto_submit_after_manual_run.js",
     "tests/dev-check.ps1",
     "tests/session-end.ps1",
-    "tests/version-contract.test.js",
-    "tests/chrome-mcp-snapshot.example.json"
+    "tests/version-contract.test.js"
 )
 
 foreach ($file in $requiredFiles) {
@@ -73,58 +66,5 @@ Pass-Check "Repository entry points and manifest are valid"
 $chrome = Get-Process -Name chrome -ErrorAction SilentlyContinue | Select-Object -First 1
 Require-Check ($null -ne $chrome) "Chrome is not running. Start Chrome before development."
 Pass-Check "Chrome is running"
-
-Require-Check (-not [string]::IsNullOrWhiteSpace($McpSnapshot)) `
-    "Chrome DevTools MCP snapshot is missing. Run list_pages, write its page and extension service-worker URLs to a fresh snapshot JSON, then set CHROME_DEVTOOLS_MCP_SNAPSHOT (see helper.md)."
-Require-Check (Test-Path -LiteralPath $McpSnapshot -PathType Leaf) `
-    "Chrome DevTools MCP snapshot does not exist: $McpSnapshot"
-
-try {
-    $snapshot = Get-Content -LiteralPath $McpSnapshot -Raw | ConvertFrom-Json
-} catch {
-    Fail-Check "Chrome DevTools MCP snapshot is not valid JSON: $McpSnapshot"
-}
-
-Require-Check ($snapshot.mcpConnected -eq $true) `
-    "Chrome DevTools MCP is not marked connected in the snapshot."
-
-$connectedAt = $null
-try {
-    $connectedAt = [DateTimeOffset]::Parse($snapshot.connectedAt)
-} catch {
-    Fail-Check "Chrome DevTools MCP snapshot has no valid connectedAt timestamp."
-}
-
-$age = ([DateTimeOffset]::UtcNow - $connectedAt.ToUniversalTime()).TotalSeconds
-Require-Check ($age -ge -30 -and $age -le $SnapshotMaxAgeSeconds) `
-    "Chrome DevTools MCP snapshot is stale ($([math]::Round($age)) seconds old)."
-Pass-Check "Chrome DevTools MCP is connected and the snapshot is fresh"
-
-$pages = @($snapshot.pages)
-$serviceWorkers = @($snapshot.extensionServiceWorkers)
-
-if ([string]::IsNullOrWhiteSpace($ExtensionId)) {
-    $worker = $serviceWorkers |
-        Where-Object { $_.url -match '^chrome-extension://[^/]+/background\.js$' } |
-        Select-Object -First 1
-} else {
-    $worker = $serviceWorkers |
-        Where-Object { $_.url -eq "chrome-extension://$ExtensionId/background.js" } |
-        Select-Object -First 1
-}
-
-Require-Check ($null -ne $worker) `
-    "Coding Site2LLM Extension Service Worker is not visible in the MCP snapshot. Reload the unpacked extension and refresh the snapshot."
-Pass-Check "Extension Service Worker is visible"
-
-$requiredPagePatterns = @(
-    '^https://exercism\.org/tracks/[^/]+/exercises/[^/]+/edit(?:[/?#]|$)',
-    '^https://chat\.deepseek\.com/'
-)
-
-foreach ($pattern in $requiredPagePatterns) {
-    $page = $pages | Where-Object { $_.url -match $pattern } | Select-Object -First 1
-    Require-Check ($null -ne $page) "Required test page is missing for pattern: $pattern"
-}
-Pass-Check "Required coding and LLM test pages are open"
+Write-Host "For live browser state, use Chrome DevTools MCP list_pages."
 Write-Host "PASS: development may start" -ForegroundColor Green

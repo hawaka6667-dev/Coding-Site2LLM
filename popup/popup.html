@@ -214,9 +214,12 @@
         }
 
         #status {
-            min-height: 0;
-            margin: 0;
+            margin: 8px 0 0;
             color: var(--muted);
+        }
+
+        #status:empty {
+            display: none;
         }
 
         hr {
@@ -288,13 +291,11 @@
         </select>
     </label>
 
-    <p id="status" role="status" aria-live="polite"></p>
-
     <hr>
 
     <label class="setting" for="exercism-open-new-exercise-in-editor">
         <input type="checkbox" id="exercism-open-new-exercise-in-editor">
-        <span>support Exercism Ctrl+Enter to Submit</span>
+        <span>support Exercism Ctrl+Enter for submit.</span>
     </label>
 
     <hr>
@@ -314,6 +315,8 @@
             <button id="daily-practice-cancel" type="button">Cancel</button>
         </form>
     </section>
+
+    <p id="status" role="status" aria-live="polite"></p>
 
     <script src="daily_practice_providers.js"></script>
     <script src="popup.js"></script>

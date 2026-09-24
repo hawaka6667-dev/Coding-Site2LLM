@@ -31,7 +31,6 @@ if (-not $chromePath) {
 $filesToCopy = @(
     "manifest.json",
     "background.js",
-    "content.js",
     "icons",
     "options",
     "popup",

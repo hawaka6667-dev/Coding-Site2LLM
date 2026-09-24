@@ -1,5 +1,5 @@
 /* @machine
-file: worker/exercism/auto_mark_exercise_complete.js
+file: worker/exercism/overview/auto_mark_exercise_complete.js
 role: request mark-complete chain when control appears
 owns: independent from open_exercise_in_editor
 events: turbo:load | turbo:render | MutationObserver

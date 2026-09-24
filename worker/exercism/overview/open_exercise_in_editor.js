@@ -1,5 +1,5 @@
 /* @machine
-file: worker/exercism/open_exercise_in_editor.js
+file: worker/exercism/overview/open_exercise_in_editor.js
 role: redirect overview to editor when no confirmation remains
 state: available|started|iterated|completed|unknown
 redirect: available or started -> /edit

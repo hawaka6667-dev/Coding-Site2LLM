@@ -20,8 +20,8 @@ test("uses the version policy documented in helper.md", () => {
     const manifest = readJson("manifest.json");
     const packageJson = readJson("package.json");
 
-    assert.match(helper, /纯文档、测试和修复不递增版本/);
-    assert.match(helper, /新增功能默认递增补丁版本 `0\.01`/);
+    assert.match(helper, /Documentation-only changes, tests, and bug fixes do not increment the version/);
+    assert.match(helper, /new features increment the patch version by `0\.01`/);
     assert.match(helper, /\.build\/v<version>/);
     assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
     assert.equal(
@@ -32,7 +32,7 @@ test("uses the version policy documented in helper.md", () => {
 
 test("current feature release advances beyond the previous release tag", () => {
     const manifest = readJson("manifest.json");
-    const previousRelease = "0.4.1";
+    const previousRelease = "0.4.2";      //这里为啥要硬编码
     const current = manifest.version.split(".").map(Number);
     const previous = previousRelease.split(".").map(Number);
 

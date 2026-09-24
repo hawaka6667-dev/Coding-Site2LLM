@@ -776,10 +776,6 @@ async function completeExercismExercise(tabId) {
                         )
                     );
 
-                if (status === "completed" || solved) {
-                    return "completed";
-                }
-
                 const button = [...document.querySelectorAll("button")]
                     .find(candidate =>
                         candidate.offsetWidth > 0 &&
@@ -789,6 +785,10 @@ async function completeExercismExercise(tabId) {
                             candidate.innerText.trim()
                         )
                     );
+
+                if (status === "completed" || (solved && !button)) {
+                    return "completed";
+                }
 
                 if (!button || hasClickedConfirm) {
                     return "waiting";
