@@ -476,6 +476,69 @@ chrome.tabs.onRemoved?.addListener((tabId, removeInfo) => {
         });
 });
 
+function getExercismConceptsPath(exerciseUrl) {
+    try {
+        const parsedUrl = new URL(exerciseUrl);
+        const match = parsedUrl.pathname.match(
+            /^\/tracks\/([^/]+)\/exercises\/[^/]+(?:\/edit)?\/?$/
+        );
+
+        return parsedUrl.origin === "https://exercism.org" && match
+            ? `/tracks/${match[1]}/concepts`
+            : "";
+    } catch (_) {
+        return "";
+    }
+}
+
+async function reloadExercismConceptsForExercise(exerciseUrl) {
+    const conceptsPath = getExercismConceptsPath(exerciseUrl);
+    if (!conceptsPath) {
+        return false;
+    }
+
+    const tabs = await chrome.tabs.query({
+        url: "https://exercism.org/tracks/*/concepts*"
+    });
+    const matchingTabs = tabs.filter(tab => {
+        try {
+            const parsedUrl = new URL(tab.url);
+            return parsedUrl.origin === "https://exercism.org" &&
+                (parsedUrl.pathname === conceptsPath ||
+                    parsedUrl.pathname === `${conceptsPath}/`);
+        } catch (_) {
+            return false;
+        }
+    });
+
+    await Promise.all(matchingTabs
+        .filter(tab => Number.isInteger(tab.id))
+        .map(tab => chrome.tabs.reload(tab.id)));
+    return matchingTabs.length > 0;
+}
+
+async function markCompleteAndRefreshConcepts(tabId, exerciseUrl) {
+    const platform = getPlatform(exerciseUrl);
+    if (typeof platform.markComplete !== "function") {
+        return false;
+    }
+
+    const completed = await platform.markComplete(tabId);
+    if (completed !== true) {
+        return false;
+    }
+
+    const settings = await chrome.storage.local.get(
+        "exercismRefreshConceptsAfterComplete"
+    );
+    if (settings.exercismRefreshConceptsAfterComplete === false) {
+        return true;
+    }
+
+    await reloadExercismConceptsForExercise(exerciseUrl);
+    return true;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "keyboard-shortcut-release") {
         keyboardShortcutHeld = false;
@@ -527,7 +590,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message?.type === "exercism-test-submit") {
-        runExercismTestSubmit().catch(error => {
+        runExercismTestSubmit(sender.tab?.id).catch(error => {
             console.error("[exercism] test and submit ERROR:", error);
         });
         return;
@@ -562,13 +625,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
-    const platform = getPlatform(sender.tab.url);
-    if (typeof platform.markComplete !== "function") {
-        console.error("[exercism] mark complete ERROR: unsupported page.");
-        return;
-    }
-
-    platform.markComplete(tabId).catch(error => {
+    markCompleteAndRefreshConcepts(tabId, sender.tab.url).catch(error => {
         console.error("[exercism] mark complete ERROR:", error);
     });
 });

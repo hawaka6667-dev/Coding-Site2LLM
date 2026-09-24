@@ -2,6 +2,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     exercismOpenNewExerciseInEditor: true,
     exercismAutoSubmitAfterManualRun: true,
     exercismAutoMarkComplete: true,
+    exercismRefreshConceptsAfterComplete: true,
     iconTheme: "ice-cyan"
 });
 const DEFAULT_SHORTCUTS = Object.freeze({

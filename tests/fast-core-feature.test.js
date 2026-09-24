@@ -1,5 +1,5 @@
 /* @machine
-file: tests/minimal-core-feature.test.js
+file: tests/coding-to-llm-workflow.test.js
 role: verify prompt assembly and context normalization
 run: npm run test:unit
 */
@@ -14,10 +14,11 @@ const ROOT_DIR = path.join(__dirname, "..");
 
 function loadWorker() {
     const tabState = [];
+    const messageListeners = [];
     const chrome = {
         action: { onClicked: { addListener: () => {} } },
         commands: { onCommand: { addListener: () => {} } },
-        runtime: { onMessage: { addListener: () => {} } },
+        runtime: { onMessage: { addListener: listener => messageListeners.push(listener) } },
         scripting: { executeScript: async () => [{ result: true }] },
         tabs: {
             query: async details => details?.windowId
@@ -42,6 +43,7 @@ function loadWorker() {
         }
     };
     context.tabState = tabState;
+    context.messageListeners = messageListeners;
 
     vm.runInContext(
         fs.readFileSync(path.join(ROOT_DIR, "background.js"), "utf8"),
@@ -50,18 +52,22 @@ function loadWorker() {
     return context;
 }
 
-function loadKeyboardShortcuts() {
+function loadKeyboardShortcuts(hostname = "example.com") {
     const listeners = [];
+    const messages = [];
     const context = vm.createContext({
-        chrome: { storage: { local: { get: async () => ({}) } }, runtime: { sendMessage: () => {} } },
+        chrome: {
+            storage: { local: { get: async () => ({}) } },
+            runtime: { sendMessage: message => messages.push(message) }
+        },
         document: { addEventListener: (type, listener) => listeners.push({ type, listener }) },
-        location: { hostname: "example.com" }
+        location: { hostname }
     });
     vm.runInContext(
         fs.readFileSync(path.join(ROOT_DIR, "worker", "keyboard_shortcuts.js"), "utf8"),
         context
     );
-    return { context, listeners };
+    return { context, listeners, messages };
 }
 
 test("supports Alt and Shift in shortcut matching", () => {
@@ -91,6 +97,31 @@ test("supports Alt and Shift in shortcut matching", () => {
         "shortcutMatches({ key: '+', code: 'Equal', ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }, 'Ctrl++')",
         context
     ), true);
+});
+
+test("dispatches Smart Return synchronously on the first shortcut press", () => {
+    const { listeners, messages } = loadKeyboardShortcuts("chat.deepseek.com");
+    const keydown = listeners.find(listener => listener.type === "keydown").listener;
+    let prevented = false;
+    let stopped = false;
+
+    keydown({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat: false,
+        preventDefault: () => { prevented = true; },
+        stopPropagation: () => { stopped = true; }
+    });
+
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].type, "keyboard-shortcut");
+    assert.equal(messages[0].command, "smart-return");
 });
 
 test("assembles title, description, feedback, and source", () => {
@@ -358,4 +389,74 @@ test("deduplicates Exercism test-and-submit requests per tab", async () => {
     ]);
 
     assert.equal(context.submissionCalls, 1);
+});
+
+test("routes Ctrl+Enter submission to the Exercism tab that sent the message", async () => {
+    const context = loadWorker();
+    const tabLookups = [];
+    let finishSubmission;
+    context.chrome.tabs.get = async tabId => {
+        tabLookups.push(tabId);
+        return {
+            id: tabId,
+            url: "https://exercism.org/tracks/python/exercises/pov/edit"
+        };
+    };
+    context.submissionFinished = new Promise(resolve => {
+        finishSubmission = resolve;
+    });
+    context.finishSubmission = finishSubmission;
+    vm.runInContext(
+        "ExercismAdapter.testAndSubmit = async tabId => { submittedTabId = tabId; finishSubmission(); }",
+        context
+    );
+    context.submittedTabId = null;
+
+    context.messageListeners[0](
+        { type: "exercism-test-submit" },
+        { tab: { id: 42, url: "https://exercism.org/tracks/python/exercises/pov/edit" } }
+    );
+    await context.submissionFinished;
+
+    assert.deepEqual(tabLookups, [42]);
+    assert.equal(context.submittedTabId, 42);
+});
+
+test("captures Ctrl+Enter in the Exercism editor and sends the submit message", () => {
+    const listeners = [];
+    const messages = [];
+    const context = vm.createContext({
+        document: {
+            addEventListener: (type, listener, capture) =>
+                listeners.push({ type, listener, capture })
+        },
+        chrome: {
+            runtime: {
+                sendMessage: message => messages.push(message)
+            }
+        }
+    });
+    vm.runInContext(
+        fs.readFileSync(path.join(ROOT_DIR, "content.js"), "utf8"),
+        context
+    );
+    const prevented = [];
+    const event = {
+        key: "Enter",
+        ctrlKey: true,
+        altKey: false,
+        shiftKey: false,
+        metaKey: false,
+        preventDefault: () => prevented.push("default"),
+        stopPropagation: () => prevented.push("propagation"),
+        stopImmediatePropagation: () => prevented.push("immediate")
+    };
+
+    listeners[0].listener(event);
+
+    assert.equal(listeners[0].type, "keydown");
+    assert.equal(listeners[0].capture, true);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].type, "exercism-test-submit");
+    assert.deepEqual(prevented, ["default", "propagation", "immediate"]);
 });

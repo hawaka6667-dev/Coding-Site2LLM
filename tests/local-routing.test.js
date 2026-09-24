@@ -12,6 +12,60 @@ const vm = require("node:vm");
 
 const ROOT_DIR = path.join(__dirname, "..");
 
+test("rechecks Exercism auto-completion after Turbo navigation", async () => {
+    const documentListeners = new Map();
+    const messages = [];
+    let hasMarkComplete = false;
+    const button = {
+        innerText: "Mark as complete",
+        offsetWidth: 100,
+        offsetHeight: 30,
+        disabled: false
+    };
+    const document = {
+        documentElement: {},
+        addEventListener: (type, listener) => documentListeners.set(type, listener),
+        querySelectorAll: () => hasMarkComplete ? [button] : []
+    };
+    class MutationObserver {
+        observe() {}
+    }
+    const context = vm.createContext({
+        chrome: {
+            storage: { local: { get: async () => ({}) } },
+            runtime: { sendMessage: message => messages.push(message) }
+        },
+        document,
+        location: { href: "https://exercism.org/tracks/go/exercises/example/edit" },
+        MutationObserver,
+        console
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "auto_mark_exercise_complete.js"),
+            "utf8"
+        ),
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    hasMarkComplete = true;
+    context.location.href = "https://exercism.org/tracks/go/exercises/example";
+    documentListeners.get("turbo:load")();
+    await new Promise(resolve => setImmediate(resolve));
+
+    documentListeners.get("turbo:render")();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(messages.length, 1);
+
+    context.location.href = "https://exercism.org/tracks/go/exercises/another-example";
+    documentListeners.get("turbo:load")();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(messages.length, 2);
+    assert.equal(messages.every(message => message.type === "exercism-mark-complete"), true);
+});
+
 function loadWorker({ tabs = [] } = {}) {
     const chrome = {
         action: { onClicked: { addListener: () => {} } },
@@ -20,7 +74,7 @@ function loadWorker({ tabs = [] } = {}) {
         scripting: { executeScript: async () => [{ result: true }] },
         tabs: { query: async () => tabs, update: async () => {} }
     };
-    const context = vm.createContext({ chrome, console, performance, setTimeout });
+    const context = vm.createContext({ chrome, console, performance, setTimeout, URL });
     context.importScripts = (...files) => {
         for (const file of files) {
             vm.runInContext(
@@ -423,4 +477,108 @@ test("remembers a redirect so one exercise cannot loop in a tab session", () => 
         ),
         false
     );
+});
+
+test("refreshes only matching track concepts tabs after confirmed completion", async () => {
+    const context = loadWorker();
+    const reloadedTabIds = [];
+    context.getPlatform = () => ({ markComplete: async () => true });
+    context.chrome.storage = {
+        local: { get: async () => ({}) }
+    };
+    context.chrome.tabs.query = async filter => {
+        assert.equal(filter.url, "https://exercism.org/tracks/*/concepts*");
+        return [
+            { id: 1, url: "https://exercism.org/tracks/go/concepts" },
+            { id: 2, url: "https://exercism.org/tracks/rust/concepts" },
+            { id: 3, url: "https://exercism.org/tracks/go/concepts/?view=all" },
+            { id: 4, url: "https://exercism.org/tracks/go/concepts-extra" },
+            { id: 5, url: "https://example.com/tracks/go/concepts" }
+        ];
+    };
+    context.chrome.tabs.reload = async tabId => {
+        reloadedTabIds.push(tabId);
+    };
+
+    const completed = await context.markCompleteAndRefreshConcepts(
+        20,
+        "https://exercism.org/tracks/go/exercises/lasagna-master"
+    );
+
+    assert.equal(completed, true);
+    assert.deepEqual(reloadedTabIds, [1, 3]);
+});
+
+test("does not refresh concepts when completion is unconfirmed or the option is off", async () => {
+    const context = loadWorker();
+    let queriedTabs = false;
+    context.getPlatform = () => ({ markComplete: async () => false });
+    context.chrome.storage = {
+        local: { get: async () => ({}) }
+    };
+    context.chrome.tabs.query = async () => {
+        queriedTabs = true;
+        return [];
+    };
+
+    assert.equal(await context.markCompleteAndRefreshConcepts(
+        20,
+        "https://exercism.org/tracks/go/exercises/lasagna-master"
+    ), false);
+    assert.equal(queriedTabs, false);
+
+    context.getPlatform = () => ({ markComplete: async () => true });
+    context.chrome.storage.local.get = async () => ({
+        exercismRefreshConceptsAfterComplete: false
+    });
+    assert.equal(await context.markCompleteAndRefreshConcepts(
+        20,
+        "https://exercism.org/tracks/go/exercises/lasagna-master"
+    ), true);
+    assert.equal(queriedTabs, false);
+});
+
+test("restores and saves the Exercism concepts page scroll position", () => {
+    const storage = new Map([
+        ["codingSite2LlmExercismConceptsScroll:/tracks/go/concepts", "640"]
+    ]);
+    const windowListeners = new Map();
+    const documentListeners = new Map();
+    const window = {
+        scrollY: 0,
+        addEventListener: (type, listener) => windowListeners.set(type, listener),
+        scrollTo: (_left, top) => {
+            window.scrollY = top;
+        }
+    };
+    const context = vm.createContext({
+        document: {
+            addEventListener: (type, listener) => documentListeners.set(type, listener)
+        },
+        location: { pathname: "/tracks/go/concepts" },
+        requestAnimationFrame: callback => callback(),
+        sessionStorage: {
+            getItem: key => storage.get(key) ?? null,
+            setItem: (key, value) => storage.set(key, String(value))
+        },
+        window
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "preserve_concepts_scroll_position.js"),
+            "utf8"
+        ),
+        context
+    );
+
+    assert.equal(window.scrollY, 640);
+    window.scrollY = 825;
+    windowListeners.get("scroll")();
+    assert.equal(
+        storage.get("codingSite2LlmExercismConceptsScroll:/tracks/go/concepts"),
+        "825"
+    );
+    assert.equal(typeof windowListeners.get("pagehide"), "function");
+    assert.equal(typeof documentListeners.get("turbo:load"), "function");
 });

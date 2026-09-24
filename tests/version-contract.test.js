@@ -32,7 +32,7 @@ test("uses the version policy documented in helper.md", () => {
 
 test("current feature release advances beyond the previous release tag", () => {
     const manifest = readJson("manifest.json");
-    const previousRelease = "0.4.0";
+    const previousRelease = "0.4.1";
     const current = manifest.version.split(".").map(Number);
     const previous = previousRelease.split(".").map(Number);
 

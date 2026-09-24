@@ -8,6 +8,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const vm = require("node:vm");
 
 const ROOT_DIR = path.join(__dirname, "..");
 
@@ -51,7 +52,8 @@ test("keeps the general options page wired to implemented Exercism features", ()
     for (const key of [
         "exercismOpenNewExerciseInEditor",
         "exercismAutoSubmitAfterManualRun",
-        "exercismAutoMarkComplete"
+        "exercismAutoMarkComplete",
+        "exercismRefreshConceptsAfterComplete"
     ]) {
         assert.match(optionsHtml, new RegExp(`data-setting="${key}"`));
         assert.match(optionsSource, new RegExp(key));
@@ -104,6 +106,57 @@ test("keeps the popup toggle wired to the Exercism redirect setting", () => {
         redirectSource,
         /EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_DEFAULT = true/
     );
+});
+
+test("keeps daily-practice destinations in an extensible popup provider list", () => {
+    const popupHtml = fs.readFileSync(
+        path.join(ROOT_DIR, "popup", "popup.html"),
+        "utf8"
+    );
+    const popupSource = fs.readFileSync(
+        path.join(ROOT_DIR, "popup", "popup.js"),
+        "utf8"
+    );
+    const providerSource = fs.readFileSync(
+        path.join(ROOT_DIR, "popup", "daily_practice_providers.js"),
+        "utf8"
+    );
+    const fixedDate = class extends Date {
+        constructor(...args) {
+            super(...(args.length ? args : ["2026-09-24T12:00:00.000Z"]));
+        }
+    };
+    const context = { Date: fixedDate };
+
+    vm.runInNewContext(
+        `${providerSource}\nglobalThis.providers = DAILY_PRACTICE_PROVIDERS;`,
+        context
+    );
+
+    const providers = Array.from(context.providers, provider => ({
+        id: provider.id,
+        label: provider.label,
+        url: provider.getUrl()
+    }));
+
+    assert.match(popupHtml, /aria-labelledby="daily-practice-heading"/);
+    assert.match(popupHtml, /id="daily-practice-links"/);
+    assert.match(popupHtml, /<script src="daily_practice_providers\.js"><\/script>/);
+    assert.match(popupHtml, /\.daily-practice-button/);
+    assert.match(popupSource, /chrome\.tabs\.create\(\{ url: provider\.getUrl\(\) \}\)/);
+    assert.match(popupSource, /for \(const provider of getDailyPracticeProviders\(\)\)/);
+    assert.deepEqual(providers, [
+        {
+            id: "leetcode",
+            label: "LeetCode Daily📅",
+            url: "https://leetcode.com/problemset/?envType=daily-question&envId=2026-09-24"
+        },
+        {
+            id: "codewars",
+            label: "Codewars",
+            url: "https://www.codewars.com/dashboard"
+        }
+    ]);
 });
 
 test("keeps the popup LLM provider setting wired to the worker", () => {
@@ -176,6 +229,17 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
     const markCompleteMessageType = /"exercism-mark-complete"/;
     assert.match(markCompleteSource, markCompleteMessageType);
     assert.match(workflowSource, markCompleteMessageType);
+});
+
+test("registers the concepts scroll-restoration script on Exercism concepts pages", () => {
+    const conceptsScript = readManifest().content_scripts.find(script =>
+        script.js.includes("worker/exercism/preserve_concepts_scroll_position.js")
+    );
+
+    assert.deepEqual(conceptsScript.matches, [
+        "https://exercism.org/tracks/*/concepts*"
+    ]);
+    assert.equal(conceptsScript.run_at, "document_start");
 });
 
 test("keeps the extension icon assets registered", () => {

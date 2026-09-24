@@ -18,6 +18,7 @@ const LLM_HOSTS = new Set([
     "deepai.org"
 ]);
 let shortcutHeld = false;
+let shortcuts = { ...DEFAULT_SHORTCUTS };
 
 function shortcutMatches(event, shortcut) {
     if (!shortcut) {
@@ -48,9 +49,7 @@ function getEventKey(event) {
             : event.key;
 }
 
-async function getShortcuts() {
-    const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
-    const saved = stored[SHORTCUTS_KEY] || {};
+function normalizeShortcuts(saved = {}) {
     const legacyShortcut = saved["run-workflow"];
     return Object.fromEntries(
         Object.keys(DEFAULT_SHORTCUTS).map(name => [
@@ -60,29 +59,38 @@ async function getShortcuts() {
     );
 }
 
+chrome.storage.onChanged?.addListener((changes, areaName) => {
+    if (areaName === "local" && changes[SHORTCUTS_KEY]) {
+        shortcuts = normalizeShortcuts(changes[SHORTCUTS_KEY].newValue);
+    }
+});
+
+chrome.storage.local.get(SHORTCUTS_KEY)
+    .then(stored => {
+        shortcuts = normalizeShortcuts(stored[SHORTCUTS_KEY]);
+    })
+    .catch(() => {});
+
 document.addEventListener("keydown", event => {
     if (event.repeat || shortcutHeld) {
         return;
     }
 
-    getShortcuts().then(shortcuts => {
-        const commandName = LLM_HOSTS.has(location.hostname)
-            ? "smart-return"
-            : "send-context";
-        const command = shortcutMatches(event, shortcuts[commandName])
-            ? commandName
-            : null;
-        if (!command) {
-            return;
-        }
+    const command = LLM_HOSTS.has(location.hostname)
+        ? "smart-return"
+        : "send-context";
+    if (!shortcutMatches(event, shortcuts[command])) {
+        return;
+    }
 
-        shortcutHeld = true;
-        event.preventDefault();
-        event.stopPropagation();
+    shortcutHeld = true;
+    event.preventDefault();
+    event.stopPropagation();
+    try {
         chrome.runtime.sendMessage({ type: "keyboard-shortcut", command });
-    }).catch(() => {
-        // The extension context may disappear while an existing tab remains open.
-    });
+    } catch (_) {
+        shortcutHeld = false;
+    }
 }, true);
 
 document.addEventListener("keyup", event => {
@@ -90,17 +98,17 @@ document.addEventListener("keyup", event => {
         return;
     }
 
-    getShortcuts().then(shortcuts => {
-        const matchesShortcut = Object.values(shortcuts).some(shortcut => {
-            const key = shortcut?.split("+").at(-1);
-            return key && getEventKey(event).toUpperCase() === key.toUpperCase();
-        });
-
-        if (matchesShortcut) {
-            shortcutHeld = false;
-            chrome.runtime.sendMessage({ type: "keyboard-shortcut-release" });
-        }
-    }).catch(() => {
-        shortcutHeld = false;
+    const matchesShortcut = Object.values(shortcuts).some(shortcut => {
+        const key = shortcut?.split("+").at(-1);
+        return key && getEventKey(event).toUpperCase() === key.toUpperCase();
     });
+
+    if (matchesShortcut) {
+        shortcutHeld = false;
+        try {
+            chrome.runtime.sendMessage({ type: "keyboard-shortcut-release" });
+        } catch (_) {
+            // The extension context may disappear while an existing tab remains open.
+        }
+    }
 }, true);

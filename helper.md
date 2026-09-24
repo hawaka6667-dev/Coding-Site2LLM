@@ -13,6 +13,12 @@
 
 扩展是上下文传输层，不负责替用户分析、总结或改写题目。
 
+### 用户目标优先
+
+所有界面、输入和自动化设计先回答目标用户要完成什么，再选择技术实现。不得把浏览器默认行为、开发者习惯、框架限制或未来扩展计划当作用户目标。用户目标明确后，依次确定任务流程、可接受的输入、错误恢复、产品语言策略，最后才选择原生控件、校验和本地化机制。
+
+当前目标用户是学生和做题者。他们需要在题目、代码编辑器与 LLM 之间快速切换。支持站点、开发者使用的语言和当前网页语言都是实现环境，不能被当作用户画像或界面语言偏好。
+
 当前支持的 coding site：Exercism、LeetCode、Codewars，以及其它 HTTP(S) 页面的原始源码兜底。
 
 当前支持的 LLM：DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等。具体 provider 配置以 `background.js` 为准。
@@ -24,19 +30,43 @@
 | prompt、站点上下文 | `worker/extract_coding_site_context_with_site_adapters.js` | `npm run test:unit` |
 | URL 和站点路由 | `worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
 | Exercism overview 跳转 | `worker/exercism/open_exercise_in_editor.js` | `npm run test:routing` |
-| Exercism 完成确认 | `worker/exercism/auto_mark_exercise_complete.js` | `npm run test:contracts` |
+| Exercism 完成确认、concepts 刷新与滚动恢复 | `worker/exercism/auto_mark_exercise_complete.js`, `worker/run_coding_context_to_llm_workflow.js`, `worker/exercism/preserve_concepts_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism 编辑页提交 | `worker/exercism/auto_submit_after_manual_run.js` | `npm run test:contracts` |
+| popup 每日练习入口 | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
 | 扩展注入和 manifest | `manifest.json`, `content.js`, `worker/` | `npm run test:contracts` |
 | 开发环境和文件入口 | `tests/dev-check.ps1`, `package.json`, `manifest.json` | `npm run dev:check` |
+
+`dev:check` 的浏览器前置条件来自 Chrome DevTools MCP 的实时 `list_pages`，不是仅凭 Chrome 进程判断。运行 `list_pages` 后，把输出中的页面 URL 和扩展 Service Worker URL 写入新鲜 JSON 快照（格式参考 `tests/chrome-mcp-snapshot.example.json`），至少包含：
+
+```json
+{
+  "schemaVersion": 1,
+  "source": "Chrome DevTools MCP list_pages",
+  "mcpConnected": true,
+  "connectedAt": "当前 UTC ISO 时间",
+  "pages": [{ "url": "页面 URL" }],
+  "extensionServiceWorkers": [{ "url": "chrome-extension://扩展 ID/background.js" }]
+}
+```
+
+快照需在运行前 300 秒内生成；页面列表要包含 Exercism `/edit` 页和 DeepSeek 页面，Service Worker 列表要包含本扩展的 `background.js`。在 PowerShell 设置快照路径后再运行检查：
+
+```powershell
+$env:CHROME_DEVTOOLS_MCP_SNAPSHOT = Join-Path $env:TEMP "coding-site2llm-chrome-mcp-snapshot.json"
+npm run dev:check
+```
+
+不要把带实时页面状态和时间戳的临时快照提交到仓库。
 
 ### 标准验证顺序
 
 1. 先运行职责对应的最小测试。
 2. 需要确认页面事实时，使用 Chrome DevTools MCP 探测真实 DOM、路由和编辑器状态。
-3. 修改未打包扩展后，reload 扩展：`loccbnegdbnncgomcaemokbffafjijpj`。
-4. reload 扩展后刷新已有 coding/LLM 页面；旧 content script 的 extension context 已失效。
+3. 修改未打包扩展后运行 `npm run session:end`；测试通过后，它会依次 reload 扩展并刷新已有 coding/LLM 页面。
+4. 配置 `CODING_SITE2LLM_RELOAD_COMMAND` 和 `CODING_SITE2LLM_REFRESH_COMMAND`，分别指向可执行的外部 Chrome/MCP bridge 命令；两项缺失时脚本会在浏览器操作前停止。
+5. reload 扩展后必须刷新已有 coding/LLM 页面；旧 content script 的 extension context 已失效。
 5. 需要用户点击页面按钮时，明确提醒用户确认；不要用猜测的坐标代替确认。
-6. 测试完页面后，默认刷新一下页面。
+6. 测试完页面后，默认刷新一下页面，不留残余。
 
 纯文档、测试和修复不递增版本。新增功能默认递增补丁版本 `0.01`，并重新打包到对应的 `.build/v<version>/`。
 
@@ -62,7 +92,23 @@ MCP 是调试探针，不是生产依赖。先观察真实运行时，再修改 
 
 不做通用跨网站编辑器抓取器，不在扩展内生成解题内容，不把 MCP 脚本作为生产运行时依赖。
 
-`.feedback/` 只处理用户当前推入聊天框的那一条 feedback。验证解决后移动到 `.feedback/old/`，不要顺手处理其它 feedback。
+popup 的每日练习入口由 `popup/daily_practice_providers.js` 的 provider 列表驱动。LeetCode 使用当天 UTC 日期构造 Daily Question 页面；Codewars 直接打开 dashboard。新增站点时只需添加 provider 配置，并扩展对应的 contract test。
+
+### Popup 输入与语言规范
+
+每日练习的自定义地址输入是“保存一个可打开的网站”，不是要求用户手写完整 URL 协议。它必须遵守：
+
+- 先按目标用户的常见操作设计：用户输入或粘贴站点地址后，应能立即加入每日练习列表；技术校验只能保护这个目标，不能替代或阻断它。
+- 接受完整 HTTP(S) URL 和裸域名（如 `baidu.com`）；裸域名保存前规范化为 `https://baidu.com/`。
+- 只允许 HTTP(S) 目标；拒绝 `javascript:`、`data:` 等非 Web 协议。
+- Enter 与点击 Add 使用同一提交路径；取消会清空输入并关闭表单。
+- 不使用 `input type="url"` 拦截裸域名。浏览器会在脚本运行前阻止表单提交，并以浏览器 UI 语言显示原生错误气泡，造成输入行为和产品语言不可控。
+- 用户可见文案须由面向学生和做题者的产品语言策略决定，不能从开发者语言、支持站点或当前网页语言推断，也不能意外混入浏览器原生校验文案。本地化是后续实现：扩展引入多语言时，使用 Chrome `_locales` 和 `chrome.i18n`，以 Chrome UI 语言选择译文；不要根据页面内容、输入网址或开发者语言猜测用户语言。
+- 任何调整必须覆盖裸域名规范化、Enter 提交和非 HTTP(S) URL 拒绝的单元测试。
+
+本次设计失误是先接受浏览器的“格式正确 URL”定义，再倒推用户流程。浏览器的 `type="url"` 只接受绝对 URL，而用户目标是尽快加入一个练习站点；应用层应先支持常见输入，再在保存边界执行明确的协议安全校验。
+
+`.feedback/` 只处理开发者当前推入聊天框的那一条 feedback。验证解决后移动到 `.feedback/old/`，不要顺手处理其它 feedback。
 
 ## B. 给 LLM：技术契约
 
@@ -175,9 +221,10 @@ npm run test:unit       # prompt、上下文和反馈清理
 npm run test:routing    # URL、provider 和 adapter 路由
 npm run test:contracts  # manifest、注入、Exercism wiring 和资源契约
 npm run dev:check       # Chrome、MCP、Service Worker、必要页面和文件入口
-npm run session:end     # 测试通过后调用外部桥接命令 reload 扩展
-npm run test:all        # 主动做全局代码维护时运行
+npm run session:end     # 测试通过后 reload 扩展并刷新已有 coding/LLM 页面
 ```
+
+禁止在日常开发、功能修改和提交前验证中运行 `npm run test:all`。全量测试耗时过长；必须先从 `tests/` 中按改动职责选择最小覆盖测试，并优先使用对应的 `test:unit`、`test:routing` 或 `test:contracts`。只有用户明确要求全量测试时才可运行 `test:all`。
 
 最小回归必须覆盖：支持站点路由、恶意/不支持 URL、prompt 过滤、Exercism `available/started/iterated/completed` 状态、`Exercise Solved` 终态、编辑页提交链和完成确认链。
 

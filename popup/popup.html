@@ -10,9 +10,11 @@
             --text: #1b1d21;
             --muted: #5c626b;
             --border: #d9dce1;
+            --surface: #f5f6f8;
             --button: #3a6df0;
             --button-text: #ffffff;
             --hover: #2f5cd8;
+            --danger: #c43d4b;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -20,38 +22,42 @@
                 --text: #eceef1;
                 --muted: #9aa1ab;
                 --border: #34383e;
+                --surface: #202328;
                 --button: #3a6df0;
                 --hover: #4d7bf5;
+                --danger: #ff7884;
             }
         }
 
         body {
-            width: 300px;
+            box-sizing: border-box;
+            width: 320px;
             margin: 0;
-            padding: 14px;
+            padding: 16px;
             color: var(--text);
             font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
         }
 
-        h1 {
-            margin: 0 0 10px;
-            font-size: 14px;
-        }
-
         #send-context {
+            display: block;
             width: 100%;
-            padding: 8px 10px;
+            padding: 10px 12px;
             border: 0;
-            border-radius: 6px;
+            border-radius: 7px;
             background: var(--button);
             color: var(--button-text);
             font: inherit;
             font-weight: 600;
             cursor: pointer;
+            transition: background-color 120ms ease, transform 120ms ease;
         }
 
         #send-context:hover {
             background: var(--hover);
+        }
+
+        #send-context:active {
+            transform: translateY(1px);
         }
 
         #send-context[disabled] {
@@ -59,50 +65,200 @@
             cursor: default;
         }
 
+        .daily-practice-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 9px;
+        }
+
+        .daily-practice h2 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        #daily-practice-links {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 7px;
+        }
+
+        .daily-practice-item {
+            display: flex;
+            gap: 6px;
+            max-width: 100%;
+        }
+
+        .daily-practice-button {
+            width: auto;
+            max-width: 100%;
+            min-width: 0;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            color: var(--text);
+            font: inherit;
+            font-weight: 600;
+            text-align: left;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .daily-practice-button:hover {
+            border-color: var(--button);
+            background: color-mix(in srgb, var(--button) 8%, transparent);
+        }
+
+        .daily-practice-tools {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .daily-practice-icon,
+        .daily-practice-remove {
+            display: inline-grid;
+            place-items: center;
+            flex: none;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .daily-practice-icon {
+            width: 30px;
+            height: 30px;
+            font-size: 19px;
+            line-height: 1;
+        }
+
+        .daily-practice-icon:hover,
+        .daily-practice-remove:hover {
+            border-color: var(--button);
+            color: var(--button);
+        }
+
+        .daily-practice-open-all {
+            width: auto;
+            height: auto;
+            padding: 6px 9px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .daily-practice-remove {
+            width: 32px;
+            min-height: 34px;
+            font-size: 16px;
+        }
+
+        .daily-practice-remove:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .daily-practice-form {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .daily-practice-form[hidden] {
+            display: none;
+        }
+
+        .daily-practice-form input,
+        .daily-practice-form button {
+            min-width: 0;
+            padding: 7px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+        }
+
+        .daily-practice-form input {
+            background: var(--surface);
+        }
+
+        .daily-practice-form button {
+            cursor: pointer;
+        }
+
+        .daily-practice-form button[type="submit"] {
+            border-color: var(--button);
+            background: var(--button);
+            color: var(--button-text);
+            font-weight: 600;
+        }
+
+        button:focus-visible,
+        input:focus-visible,
+        select:focus-visible {
+            outline: 2px solid var(--button);
+            outline-offset: 2px;
+        }
+
         #status {
-            min-height: 16px;
-            margin: 8px 0 0;
+            min-height: 0;
+            margin: 0;
             color: var(--muted);
         }
 
         hr {
-            margin: 14px 0;
+            margin: 10px 0;
             border: 0;
             border-top: 1px solid var(--border);
         }
 
         .setting {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 9px;
             cursor: pointer;
+            white-space: nowrap;
+            font-size: 12px;
         }
 
         .setting input {
             width: 16px;
             height: 16px;
-            margin: 1px 0 0;
+            margin: 0;
             flex: none;
             accent-color: var(--button);
         }
 
-        .detail {
-            margin: 6px 0 0 24px;
-            color: var(--muted);
-        }
-
         .provider {
             display: grid;
+            justify-items: end;
             gap: 5px;
-            margin-bottom: 12px;
+            margin: 6px 0 8px;
         }
 
         .provider select {
-            padding: 6px 8px;
+            max-width: 100%;
+            padding: 4px 6px;
             border: 1px solid var(--border);
             border-radius: 5px;
             background: transparent;
             color: inherit;
-            font: inherit;
+            font-family: inherit;
+            font-size: 12px;
+            line-height: 1.3;
         }
 
         .provider option {
@@ -120,16 +276,10 @@
 </head>
 
 <body>
-    <h1>Coding Site2LLM</h1>
-
     <button id="send-context" type="button">Send context to LLM (shortcut: Alt+Q)</button>
-    <p id="status" role="status" aria-live="polite"></p>
-
-    <hr>
 
     <label class="provider" for="llm-provider">
-        <span>LLM provider</span>
-        <select id="llm-provider">
+        <select id="llm-provider" aria-label="LLM provider">
             <option value="ChatGPT">ChatGPT</option>
             <option value="Claude">Claude</option>
             <option value="DeepSeek">DeepSeek</option>
@@ -138,14 +288,34 @@
         </select>
     </label>
 
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <hr>
+
     <label class="setting" for="exercism-open-new-exercise-in-editor">
         <input type="checkbox" id="exercism-open-new-exercise-in-editor">
-        <span>Open new Exercism exercises in the editor</span>
+        <span>support Exercism Ctrl+Enter to Submit</span>
     </label>
-    <p class="detail">
-        Add Ctrl+Enter submission support.
-    </p>
 
+    <hr>
+
+    <section class="daily-practice" aria-labelledby="daily-practice-heading">
+        <div class="daily-practice-heading">
+            <h2 id="daily-practice-heading">Daily practice</h2>
+            <div class="daily-practice-tools">
+                <button id="daily-practice-open-all" class="daily-practice-open-all" type="button">Open all</button>
+                <button id="daily-practice-add" class="daily-practice-icon" type="button" aria-label="Add daily practice URL" title="Add URL">+</button>
+            </div>
+        </div>
+        <ul id="daily-practice-links"></ul>
+        <form id="daily-practice-form" class="daily-practice-form" hidden>
+            <input id="daily-practice-url" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="example.com" aria-label="Daily practice URL" required>
+            <button type="submit">Add</button>
+            <button id="daily-practice-cancel" type="button">Cancel</button>
+        </form>
+    </section>
+
+    <script src="daily_practice_providers.js"></script>
     <script src="popup.js"></script>
 </body>
 

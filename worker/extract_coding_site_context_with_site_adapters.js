@@ -710,7 +710,7 @@ const ExercismOverviewAdapter = {
     },
 
     async markComplete(tabId) {
-        await completeExercismExercise(tabId);
+        return completeExercismExercise(tabId);
     }
 };
 
@@ -740,7 +740,7 @@ async function completeExercismExercise(tabId) {
             });
         } catch (_) {
             // Submission may navigate directly to the completed page.
-            return;
+            return false;
         }
 
         if (markedComplete) break;
@@ -748,13 +748,38 @@ async function completeExercismExercise(tabId) {
     }
 
     if (!markedComplete) {
-        return;
+        return false;
     }
 
     const confirmStart = performance.now();
+    let confirmClicked = false;
     while (performance.now() - confirmStart < 5000) {
         try {
-            const confirmed = await executePage(tabId, () => {
+            const result = await executePage(tabId, hasClickedConfirm => {
+                const statusNode = document.querySelector(
+                    '[data-react-id="student-open-editor-button"]'
+                );
+                let status = "";
+
+                try {
+                    status = JSON.parse(
+                        statusNode?.getAttribute("data-react-data") || "{}"
+                    ).status || "";
+                } catch (_) {}
+
+                const solved = [...document.querySelectorAll("h1, h2, h3, h4")]
+                    .some(heading =>
+                        heading.offsetWidth > 0 &&
+                        heading.offsetHeight > 0 &&
+                        /^exercise solved$/i.test(
+                            (heading.innerText || heading.textContent || "").trim()
+                        )
+                    );
+
+                if (status === "completed" || solved) {
+                    return "completed";
+                }
+
                 const button = [...document.querySelectorAll("button")]
                     .find(candidate =>
                         candidate.offsetWidth > 0 &&
@@ -765,19 +790,22 @@ async function completeExercismExercise(tabId) {
                         )
                     );
 
-                if (!button) {
-                    return false;
+                if (!button || hasClickedConfirm) {
+                    return "waiting";
                 }
 
                 button.click();
-                return true;
-            });
+                return "confirm-clicked";
+            }, [confirmClicked]);
 
-            if (confirmed) return;
+            if (result === "completed") return true;
+            if (result === "confirm-clicked") confirmClicked = true;
         } catch (_) {
-            return;
+            return false;
         }
 
         await sleep(100);
     }
+
+    return false;
 }

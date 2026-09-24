@@ -1,7 +1,8 @@
 # @machine
+# run this at start
 # file: tests/dev-check.ps1
-# role: block development until repository and browser prerequisites are ready
-# contract: fail fast with a reason; does not start the development server
+# role: check development prerequisites at startup or at any point during development
+# contract: report whether the current environment is ready; never starts the development server
 
 param(
     [string]$McpSnapshot = $env:CHROME_DEVTOOLS_MCP_SNAPSHOT,
@@ -41,6 +42,7 @@ $requiredFiles = @(
     "content.js",
     "popup/popup.html",
     "popup/popup.js",
+    "popup/daily_practice_providers.js",
     "options/options.html",
     "options/options.js",
     "worker/llm_copy_tracker.js",
@@ -73,7 +75,7 @@ Require-Check ($null -ne $chrome) "Chrome is not running. Start Chrome before de
 Pass-Check "Chrome is running"
 
 Require-Check (-not [string]::IsNullOrWhiteSpace($McpSnapshot)) `
-    "Chrome DevTools MCP snapshot is missing. Export a current MCP page snapshot and set CHROME_DEVTOOLS_MCP_SNAPSHOT."
+    "Chrome DevTools MCP snapshot is missing. Run list_pages, write its page and extension service-worker URLs to a fresh snapshot JSON, then set CHROME_DEVTOOLS_MCP_SNAPSHOT (see helper.md)."
 Require-Check (Test-Path -LiteralPath $McpSnapshot -PathType Leaf) `
     "Chrome DevTools MCP snapshot does not exist: $McpSnapshot"
 
