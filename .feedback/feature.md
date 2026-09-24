@@ -1,7 +1,7 @@
 
-1帮我提交git 我不想又是stage又是summary又是commit又是fetch的。。
+git sync 、build and release
 
-2做一下简单cleanup，主要是readability  ❌
+做一下简单cleanup，主要是readability  ❌
 ---
 
 ///////////////////////////////////////////////////////////////////
