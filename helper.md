@@ -58,7 +58,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 - timeout 用来发现 test 未完成，不等同于证明存在 infinite loop。Synchronous infinite loop 会 block event loop，应使用 external process-level timeout 并检查 CPU usage；pending async Promise 通常表现为 test timeout 或进程仍有 active handles。
 - 断言 VM 等 cross-realm values 时，比较明确 fields，或先转换为 host-realm plain objects，避免 prototype mismatch 造成误报。
 
-Documentation-only changes, tests, and bug fixes do not increment the version. By default, new features increment the patch version by `0.01`; package releases to `.build/v<version>/`.
+Documentation-only changes, tests, and bug fixes do not increment the version. By default, new features increment the patch version by `0.01`; Git tags and GitHub Releases retain the release history.
 
 ### 浏览器探测原则
 
@@ -243,6 +243,16 @@ npm run release         # 已提交版本的一键测试、打包、推送、打
 ```
 
 `npm run release` 仅从 `main` 发布已提交的 manifest version。它一次运行所有 release tests、生成 CRX/ZIP、推送 `main`、创建或复用同名 tag，并创建或更新 GitHub Release。`.codegraph/` 状态和 `.feedback/Snipaste_*` 本地截图不阻塞发布；其它未提交的文件会阻止发布，避免把不完整的功能误发出去。
+
+### 构建与发布目录
+
+```text
+scripts/   # 受版本控制的 package/release PowerShell scripts
+secrets/   # 本机唯一 CRX signing key，已忽略，不提交
+dist/      # 当前一次打包的 CRX/ZIP，已忽略，每次打包覆盖
+```
+
+不要按版本保留本地产物或复制 signing key。版本历史和可下载产物由 Git tag 与 GitHub Release 保存；本地只保留一个稳定的 `secrets/coding-site2llm.pem`，保证后续 CRX 的扩展 ID 不变。
 
 禁止在日常开发、功能修改和提交前验证中运行 `npm run test:all`。全量测试耗时过长；必须先从 `tests/` 中按改动职责选择最小覆盖测试，并优先使用对应的 `test:unit`、`test:routing` 或 `test:contracts`。只有用户明确要求全量测试时才可运行 `test:all`。
 

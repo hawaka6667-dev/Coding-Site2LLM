@@ -9,9 +9,9 @@ Set-Location $projectRoot
 $manifest = Get-Content -Raw "manifest.json" | ConvertFrom-Json
 $version = $manifest.version
 $tag = "v$version"
-$releaseDirectory = Join-Path $PSScriptRoot $tag
-$crxPath = Join-Path $releaseDirectory "Coding-Site2LLM-$tag.crx"
-$zipPath = Join-Path $releaseDirectory "Coding-Site2LLM-$tag.zip"
+$artifactDirectory = Join-Path $projectRoot "dist"
+$crxPath = Join-Path $artifactDirectory "Coding-Site2LLM-$tag.crx"
+$zipPath = Join-Path $artifactDirectory "Coding-Site2LLM-$tag.zip"
 
 if ((git branch --show-current) -ne "main") {
     throw "Releases must be published from main."
@@ -38,7 +38,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Release tests failed."
 }
 
-& npm run package:crx
+& (Join-Path $PSScriptRoot "package-extension.ps1") -OutputDirectory $artifactDirectory
 if ($LASTEXITCODE -ne 0) {
     throw "Extension packaging failed."
 }

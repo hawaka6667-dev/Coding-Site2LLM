@@ -1,4 +1,4 @@
 *.crx
-.build/*
-!.build/
-!.build/package.ps1
+.build/
+dist/
+secrets/

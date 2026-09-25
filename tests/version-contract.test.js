@@ -22,12 +22,18 @@ test("uses the version policy documented in helper.md", () => {
 
     assert.match(helper, /Documentation-only changes, tests, and bug fixes do not increment the version/);
     assert.match(helper, /new features increment the patch version by `0\.01`/);
-    assert.match(helper, /\.build\/v<version>/);
+    assert.match(helper, /Git tags and GitHub Releases retain the release history/);
     assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
     assert.equal(
         packageJson.scripts["package:crx"],
-        "powershell -ExecutionPolicy Bypass -File .build/package.ps1"
+        "powershell -ExecutionPolicy Bypass -File scripts/package-extension.ps1"
     );
+    assert.equal(
+        packageJson.scripts.release,
+        "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
+    );
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "scripts", "package-extension.ps1")), true);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "scripts", "release.ps1")), true);
 });
 
 test("current feature release advances beyond the previous release tag", () => {
