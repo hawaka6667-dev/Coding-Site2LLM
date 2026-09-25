@@ -72,7 +72,7 @@ test("stops restoring concepts scroll on exercise pages and resumes on return", 
     const animationFrames = [];
     const scrollCalls = [];
     let mutationCallback;
-    const storageKey = "codingSite2LlmExercismConceptsScroll:/tracks/go/concepts";
+    const storageKey = "codingSite2LlmExercismTrackListScroll:/tracks/go/concepts";
     const storedPositions = new Map([[storageKey, "4200"]]);
     const window = {
         scrollY: 0,
@@ -92,7 +92,7 @@ test("stops restoring concepts scroll on exercise pages and resumes on return", 
     }
     const context = vm.createContext({
         document,
-        location: { pathname: "/tracks/go/concepts" },
+        location: { pathname: "/tracks/go/concepts", search: "" },
         window,
         sessionStorage: {
             getItem: key => storedPositions.get(key) ?? null,
@@ -106,7 +106,7 @@ test("stops restoring concepts scroll on exercise pages and resumes on return", 
 
     vm.runInContext(
         fs.readFileSync(
-            path.join(ROOT_DIR, "worker", "exercism", "concepts", "preserve_concepts_scroll_position.js"),
+            path.join(ROOT_DIR, "worker", "exercism", "concepts_and_exercises", "preserve_track_list_scroll_position.js"),
             "utf8"
         ),
         context
@@ -653,7 +653,7 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
 
 test("restores and saves the Exercism concepts page scroll position", () => {
     const storage = new Map([
-        ["codingSite2LlmExercismConceptsScroll:/tracks/go/concepts", "640"]
+        ["codingSite2LlmExercismTrackListScroll:/tracks/go/concepts", "640"]
     ]);
     const windowListeners = new Map();
     const documentListeners = new Map();
@@ -671,7 +671,7 @@ test("restores and saves the Exercism concepts page scroll position", () => {
             documentElement: {},
             addEventListener: (type, listener) => documentListeners.set(type, listener)
         },
-        location: { pathname: "/tracks/go/concepts" },
+        location: { pathname: "/tracks/go/concepts", search: "" },
         requestAnimationFrame: callback => callback(),
         setTimeout: () => 1,
         clearTimeout: () => {},
@@ -696,7 +696,7 @@ test("restores and saves the Exercism concepts page scroll position", () => {
 
     vm.runInContext(
         fs.readFileSync(
-            path.join(ROOT_DIR, "worker", "exercism", "concepts", "preserve_concepts_scroll_position.js"),
+            path.join(ROOT_DIR, "worker", "exercism", "concepts_and_exercises", "preserve_track_list_scroll_position.js"),
             "utf8"
         ),
         context
@@ -711,7 +711,7 @@ test("restores and saves the Exercism concepts page scroll position", () => {
     window.scrollY = 825;
     windowListeners.get("scroll")();
     assert.equal(
-        storage.get("codingSite2LlmExercismConceptsScroll:/tracks/go/concepts"),
+        storage.get("codingSite2LlmExercismTrackListScroll:/tracks/go/concepts"),
         "825"
     );
     assert.equal(typeof windowListeners.get("pagehide"), "function");

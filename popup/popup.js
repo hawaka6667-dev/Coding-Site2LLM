@@ -193,7 +193,7 @@ async function renderShortcut() {
     const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
     const shortcuts = stored[SHORTCUTS_KEY] || {};
     const value = shortcuts["send-context"] ?? shortcuts["run-workflow"] ?? DEFAULT_SEND_CONTEXT_SHORTCUT;
-    sendButton.textContent = `Send context to LLM (${value || "None"})`;
+    sendButton.textContent = `Send question to LLM (${value || "None"})`;
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {

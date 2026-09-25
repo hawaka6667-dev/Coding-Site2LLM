@@ -6,8 +6,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     iconTheme: "ice-cyan"
 });
 const DEFAULT_SHORTCUTS = Object.freeze({
-    "send-context": "Alt+Q",
-    "smart-return": "Alt+Q"
+    "send-context": ["Alt+Q"],
+    "smart-return": ["Alt+Q"]
 });
 const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
 const ICON_THEMES = ["ice-cyan", "warm-ivory", "mint", "lemon"];
@@ -46,13 +46,21 @@ async function renderShortcut() {
     const shortcuts = Object.fromEntries(
         Object.keys(DEFAULT_SHORTCUTS).map(name => [
             name,
-            savedShortcuts[name] ?? legacyShortcut ?? DEFAULT_SHORTCUTS[name]
+            normalizeShortcutList(savedShortcuts[name] ?? legacyShortcut ?? DEFAULT_SHORTCUTS[name])
         ])
     );
 
-    for (const [name, value] of Object.entries(shortcuts)) {
-        document.getElementById(`shortcut-${name}`).value = value || "";
+    for (const [name, bindings] of Object.entries(shortcuts)) {
+        document.getElementById(`shortcut-${name}`).value = bindings[0] || "";
+        document.getElementById(`shortcut-${name}-2-slot`).hidden = bindings.length < 2;
+        document.getElementById(`shortcut-${name}-2`).value = bindings[1] || "";
+        document.getElementById(`shortcut-${name}-add`).hidden = bindings.length >= 2;
     }
+}
+
+function normalizeShortcutList(value) {
+    const bindings = Array.isArray(value) ? value : value ? [value] : [];
+    return bindings.filter(binding => typeof binding === "string").slice(0, 2);
 }
 
 function getShortcutKey(event) {
@@ -83,75 +91,127 @@ function isValidShortcut(event) {
         && !/\s/u.test(key);
 }
 
-async function saveShortcut(name, value) {
-    const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
-    const savedShortcuts = stored[SHORTCUTS_KEY] || {};
+function getShortcutBindings(savedShortcuts) {
     const legacyShortcut = savedShortcuts["run-workflow"];
-    const shortcuts = Object.fromEntries(
-        Object.keys(DEFAULT_SHORTCUTS).map(shortcutName => [
-            shortcutName,
-            shortcutName === name
-                ? value
-                : (savedShortcuts[shortcutName] ?? legacyShortcut ?? DEFAULT_SHORTCUTS[shortcutName])
+    return Object.fromEntries(
+        Object.keys(DEFAULT_SHORTCUTS).map(name => [
+            name,
+            normalizeShortcutList(savedShortcuts[name] ?? legacyShortcut ?? DEFAULT_SHORTCUTS[name])
         ])
     );
+}
+
+async function saveShortcut(name, bindings) {
+    const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
+    const savedShortcuts = stored[SHORTCUTS_KEY] || {};
+    const shortcuts = getShortcutBindings(savedShortcuts);
+    shortcuts[name] = normalizeShortcutList(bindings);
     await chrome.storage.local.set({ [SHORTCUTS_KEY]: shortcuts });
 }
 
+let activeShortcutInput = null;
+
 for (const name of Object.keys(DEFAULT_SHORTCUTS)) {
-    const input = document.getElementById(`shortcut-${name}`);
-    const error = document.getElementById(`shortcut-${name}-error`);
-    const removeButton = document.getElementById(`shortcut-${name}-remove`);
-    const resetButton = document.getElementById(`shortcut-${name}-reset`);
+    const addButton = document.getElementById(`shortcut-${name}-add`);
 
-    input.addEventListener("focus", () => {
-        input.value = "";
-        error.textContent = "Press a new shortcut, or Escape to cancel";
-    });
-    input.addEventListener("keydown", async event => {
-        event.preventDefault();
-        if (event.key === "Escape") {
-            input.blur();
-            return;
-        }
-        if (!isValidShortcut(event)) {
-            error.textContent = "Include Ctrl, Alt, Shift, or Meta plus one printable character";
-            return;
-        }
+    for (const index of [0, 1]) {
+        const suffix = index === 0 ? "" : "-2";
+        const input = document.getElementById(`shortcut-${name}${suffix}`);
+        const error = document.getElementById(`shortcut-${name}-error${suffix}`);
+        const removeButton = document.getElementById(`shortcut-${name}-remove${suffix}`);
 
-        const value = getShortcutString(event);
+        input.addEventListener("focus", () => {
+            activeShortcutInput = { name, index, input, error };
+            input.value = "";
+            error.textContent = "Press a shortcut, mouse button 4/5, or Escape to cancel";
+        });
+        input.addEventListener("keydown", async event => {
+            event.preventDefault();
+            if (event.key === "Escape") {
+                input.blur();
+                return;
+            }
+            if (!isValidShortcut(event)) {
+                error.textContent = "Include Ctrl, Alt, Shift, or Meta plus one printable character";
+                return;
+            }
+
+            await saveBinding(name, index, getShortcutString(event), input, error);
+        });
+        input.addEventListener("blur", () => {
+            if (activeShortcutInput?.input === input) {
+                activeShortcutInput = null;
+            }
+            error.textContent = "";
+            renderShortcut().catch(() => {});
+        });
+        removeButton.addEventListener("click", async () => {
+            try {
+                const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
+                const bindings = getShortcutBindings(stored[SHORTCUTS_KEY] || {})[name];
+                bindings.splice(index, 1);
+                await saveShortcut(name, bindings);
+                await renderShortcut();
+                showStatus("Shortcut removed");
+            } catch (error) {
+                showStatus("Could not remove shortcut: " + (error?.message || error));
+            }
+        });
+    }
+
+    addButton.addEventListener("click", async () => {
         try {
-            await saveShortcut(name, value);
-            input.value = value;
-            error.textContent = "Saved";
-            input.blur();
-        } catch (saveError) {
-            error.textContent = "Could not save: " + (saveError?.message || saveError);
-        }
-    });
-    input.addEventListener("blur", () => {
-        error.textContent = "";
-        renderShortcut().catch(() => {});
-    });
-    removeButton.addEventListener("click", async () => {
-        try {
-            await saveShortcut(name, "");
-            await renderShortcut();
-            showStatus("Shortcut removed");
+            const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
+            const bindings = getShortcutBindings(stored[SHORTCUTS_KEY] || {})[name];
+            if (bindings.length < 2) {
+                if (bindings.length === 0) {
+                    bindings.push("");
+                } else {
+                    bindings.push("");
+                }
+                await saveShortcut(name, bindings);
+                await renderShortcut();
+                document.getElementById(
+                    `shortcut-${name}${bindings.length === 2 ? "-2" : ""}`
+                ).focus();
+            }
         } catch (error) {
-            showStatus("Could not remove shortcut: " + (error?.message || error));
+            showStatus("Could not add shortcut: " + (error?.message || error));
         }
     });
-    resetButton.addEventListener("click", async () => {
-        try {
-            await saveShortcut(name, DEFAULT_SHORTCUTS[name]);
-            await renderShortcut();
-            showStatus("Shortcut restored");
-        } catch (error) {
-            showStatus("Could not restore shortcut: " + (error?.message || error));
-        }
-    });
+
 }
+
+async function saveBinding(name, index, value, input, error) {
+    try {
+        const stored = await chrome.storage.local.get(SHORTCUTS_KEY);
+        const bindings = getShortcutBindings(stored[SHORTCUTS_KEY] || {})[name];
+        bindings[index] = value;
+        await saveShortcut(name, bindings);
+        input.value = value;
+        error.textContent = "Saved";
+        input.blur();
+    } catch (saveError) {
+        error.textContent = "Could not save: " + (saveError?.message || saveError);
+    }
+}
+
+document.addEventListener("mousedown", async event => {
+    if (!activeShortcutInput || ![3, 4].includes(event.button)) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const value = event.button === 3 ? "Mouse4" : "Mouse5";
+    await saveBinding(
+        activeShortcutInput.name,
+        activeShortcutInput.index,
+        value,
+        activeShortcutInput.input,
+        activeShortcutInput.error
+    );
+}, true);
 
 async function saveSetting(control) {
     const key = control.dataset.setting;

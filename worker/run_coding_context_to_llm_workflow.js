@@ -268,16 +268,18 @@ async function returnToCodingPage(llmTab) {
 
     await chrome.tabs.update(targetTab.id, { active: true });
 
-    if (paste) {
-        await replaceCode(targetTab.id, paste);
-        await submitReturnedCode(targetTab.id);
+    try {
+        if (paste) {
+            await replaceCode(targetTab.id, paste);
+            await submitReturnedCode(targetTab.id);
+        }
+    } finally {
+        await saveReturnRoute({
+            ...route,
+            copied: false,
+            copiedText: ""
+        });
     }
-
-    await saveReturnRoute({
-        ...route,
-        copied: false,
-        copiedText: ""
-    });
 }
 
 function isCodingTabForPlatform(tab, sourcePlatform) {

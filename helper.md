@@ -33,8 +33,8 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | prompt、site context | `worker/extract_coding_site_context_with_site_adapters.js` | `npm run test:unit` |
 | URL routing 和 site routing | `worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
 | Exercism overview redirect and completion confirmation | `worker/exercism/overview/open_exercise_in_editor.js`, `worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism concepts scroll restoration | `worker/exercism/concepts/preserve_concepts_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism editor bridge and submission | `worker/exercism/edit/content.js`, `worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:contracts` |
+| Exercism track-list scroll restoration | `worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism editor bridge, submission, and Continue dialogs | `worker/exercism/edit/content.js`, `worker/exercism/edit/auto_submit_after_manual_run.js`, `worker/exercism/edit/continue_after_exercism_modals.js` | `npm run test:unit` 和 `npm run test:contracts` |
 | popup daily-practice entry | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
 | extension injection 和 manifest | `manifest.json`, `worker/` | `npm run test:contracts` |
 | development environment 和 entry points | `tests/dev-check.ps1`, `package.json`, `manifest.json` | `npm run dev:check` |
@@ -45,11 +45,11 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 
 1. 先运行与改动职责对应的 smallest relevant test。
 2. 需要确认 page behavior 时，使用 Chrome DevTools MCP 检查真实 DOM、routing 和 editor state。
-3. 修改 unpacked extension 后运行 `npm run session:end`；tests 通过后，它会依次 reload extension 并 refresh 已打开的 coding/LLM tabs。
-4. 配置 `CODING_SITE2LLM_RELOAD_COMMAND` 和 `CODING_SITE2LLM_REFRESH_COMMAND`，分别指向可执行的外部 Chrome/MCP bridge commands；任一 command 缺失时，script 会在 browser operation 前停止。
-5. 修改并 reload extension 后必须 refresh 已打开的 coding/LLM tabs。只 reload extension 不会重新注入已有页面的 content script；旧脚本的 extension context 已失效，快捷键或 Exercism auto-submit 可能静默失效。刷新前先确认页面编辑内容已保存。
-6. 需要用户点击 UI control 时，明确提醒用户确认；不要用猜测的 coordinates 代替确认。
-7. 页面验证结束后，默认 refresh 页面并清理临时状态。
+3. 修改 unpacked extension 后，测试通过先 reload extension，再刷新本次改动影响到的已打开 coding/LLM 页面。
+4. 用户要求 `reload` 时，重载扩展并刷新受影响网页；不判断、保护或处理任何页面内容。
+5. 扩展 reload 使用 Chrome DevTools MCP 的 `reload_extension`；随后通过扩展 Service Worker 单次调用 `chrome.tabs.query` 和并行 `chrome.tabs.reload` 刷新目标网页。不得把这项工作扩展成内容保护任务。
+7. 需要用户点击 UI control 时，明确提醒用户确认；不要用猜测的 coordinates 代替确认。
+8. 页面验证结束后，默认刷新受影响页面；不处理页面内容。
 
 ### 测试挂起与超时防护
 
@@ -75,6 +75,8 @@ live page
   -> reload_extension
   -> refresh page 并复核
 ```
+
+执行扩展刷新时，先调用 Chrome DevTools MCP 的 `reload_extension`，再通过扩展 Service Worker 单次批量刷新本次改动影响到的网页；不处理网页内容。
 
 `list_console_messages` 无法完整观察 content script errors。需要确认 content script 是否运行时，从 page context 写入 `sessionStorage` probe，再从 page main world 读取；不要使用会在 same-origin tabs 间共享数据的 `localStorage`。
 
@@ -124,9 +126,19 @@ smart-return  : LLM page -> source coding page
 
 默认均为 `Alt+Q`，配置保存在 `codingSite2LlmShortcuts`。动作名是业务契约，按键只是可替换的输入绑定。
 
+每个 action 最多有两个独立输入绑定；Options 默认显示一个，点击 Add 后才显示第二个。存储值为至多两个字符串组成的数组；读取旧版单字符串时迁移为单元素数组。键盘组合和鼠标侧键 `Mouse4` / `Mouse5` 都是有效绑定。
+
 快捷键等设计必须符合人体工学：一次按键组合在用户释放前只能触发一次。页面侧用 `event.repeat` 和 held 状态拦截长按重复事件；Service Worker 收到 `keyup` 的释放消息后立即解锁，超时只作为释放消息丢失时的异常兜底，不能被当作正常的快捷键间隔。兜底时间应明显长于普通人的按住时长，避免用户仍在按键时再次触发工作流。
 
 LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当前 coding 页记录为该 LLM 页的当前返回页；来源页关闭后，返回动作会从该 LLM 页右侧选择第一个同平台的做题页。没有匹配页时不跳转，也不清除已记录的复制文本。
+
+### 可复用工作流生命周期
+
+发送、复制、回跳不是一次性的线性脚本，而是同一 LLM tab 上可反复执行的独立 cycle。任何跨页面 workflow 都必须显式定义 `idle -> captured -> consuming -> idle` 的状态转换，以及 success、failure、cancel 和无目标页各自的终态；不能只实现首次成功路径后留下 in-flight flag、缓存文本或页面状态给下一次调用复用。
+
+Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payload；找到目标页后，无论代码写入、测试或提交成功或失败，payload 都必须在 `finally` 中消费并清空，下一次回跳只可使用新的复制事件。仅在没有匹配目标页时保留 payload，避免用户关闭来源页后丢失尚未消费的复制内容。扩展 reload、Service Worker 重启和页面 Turbo 导航都必须按这个 lifecycle 恢复可用状态，不能让上一轮的 payload 意外进入下一轮。
+
+测试必须至少覆盖同一 tab 的两轮连续 workflow，以及第一轮在写入、运行或提交阶段失败后第二轮仍能正常开始；不要只用单次成功断言证明 workflow 正确。
 
 ### 模块边界
 
@@ -139,6 +151,7 @@ LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当�
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 仅发现可用的 `Mark as complete` 并请求完成链 | 是否进入 `/edit` |
 | `auto_submit_after_manual_run.js` | 监听用户 Run Tests 并请求提交链 | overview 跳转和完成按钮 |
+| `continue_after_exercism_modals.js` | 关闭 edit 页上可见、可用的 `Continue` 弹窗 | Submit 和 overview completion |
 | `content.js` | 编辑页快捷键桥接 | Exercism 状态推断 |
 
 修改一个模块时，不把另一个模块的 selector、状态缓存或控制条件复制过来。
@@ -174,6 +187,9 @@ overview 和 `/edit` 是两个不同的页面状态。`open_exercise_in_editor.j
 编辑页提交链由其它模块负责：
 
 ```text
+编辑页初始化
+  -> 读取 Run Tests / Submit / 当前运行结果状态
+  -> 监听页面状态变化并更新本地状态
 Run Tests（按钮可用时）
   -> 等待最近一次 run 通过且文件未变化
   -> 等待 Submit 可用
@@ -188,6 +204,8 @@ Run Tests（按钮可用时）
 - `.lhs-footer .submit-btn button`
 
 不要按按钮文字匹配编辑页的 Run/Submit；tab 栏和结果面板存在同名文本。
+
+编辑页自动化必须先建立当前页面状态，不能在收到快捷键、回跳或点击事件后才以一次 DOM 读取推断状态。编辑器替换代码后，React 状态和 footer 控件可能尚未同步；此时旧的双禁用状态不表示“没有变更”。初始化负责读取当前 Run Tests、Submit、运行中和运行结果，并在 DOM/React 状态变化时更新；工作流只消费这个状态模型，不能复制 selector 或各自重建临时状态判断。缺少初始化属于设计问题，不应以固定延迟、重试或在 adapter 内散落的临时轮询替代。
 
 ### 站点 adapter 输出契约
 
@@ -208,7 +226,7 @@ feedback
 
 所有 Exercism 页面相关测试都应提供 `state-transition coverage`：从明确的 `initial state` 开始，经过页面的真实 `production flow` 和中间状态转移，最终断言 `terminal state` 及必要的 `side effects`。按 `initial state -> actions/intermediate states -> terminal state` 组织测试，不以单独断言 selector 命中、message payload、function return value 或 source structure 代替完整流程验证。
 
-- 覆盖用户可观察的关键状态转换，例如 `available -> /edit -> started`、`iterated -> Mark as complete -> Confirm -> completed`，以及编辑页 `Run Tests -> Submit -> iterated`。
+- 覆盖用户可观察的关键状态转换，例如 `available -> /edit -> started`、`iterated -> Mark as complete -> Confirm -> completed`、编辑页 `Continue dialog -> no dialog`，以及 `Run Tests -> Submit -> iterated`。
 - 可以 stub 外部的 DOM、timing 和 Chrome API boundaries，但必须运行实际的 page script、service-worker message listener 和 adapter，也就是该用例的 `system under test (SUT)`；不能 mock 掉正在验证的状态转换环节。
 - 断言 `terminal state`，并检查与该流程直接相关的 `side effects`；只保留保护不同状态转换、failure boundaries 或 stable contracts 的测试。多个测试重复覆盖同一流程时，应合并为清晰的 state scenario，避免堆叠 implementation-detail tests。
 - 实际 DOM 和 routing behavior 需要通过浏览器 MCP 探测；模拟测试用于验证 production flow，不能称作真实浏览器 `end-to-end (E2E) test`。

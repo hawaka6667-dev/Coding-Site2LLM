@@ -161,7 +161,7 @@
 
         .shortcut-row {
             display: grid;
-            grid-template-columns: 1fr minmax(210px, auto);
+            grid-template-columns: minmax(180px, 1fr) minmax(280px, 380px);
             gap: 16px;
             align-items: center;
             padding: 10px 0;
@@ -170,13 +170,40 @@
 
         .shortcut-controls {
             display: grid;
-            grid-template-columns: 150px auto auto;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: start;
+        }
+
+        .shortcut-bindings {
+            display: grid;
+            gap: 6px;
+        }
+
+        .shortcut-binding {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
             gap: 6px;
             align-items: start;
         }
 
+        .shortcut-error {
+            grid-column: 1 / -1;
+        }
+
+        .shortcut-binding[hidden],
+        .shortcut-controls button[hidden] {
+            display: none;
+        }
+
+        .shortcut-actions {
+            display: flex;
+            align-self: start;
+        }
+
         .shortcut-key {
-            width: 150px;
+            width: 100%;
+            min-width: 0;
             padding: 6px 8px;
             border: 1px solid var(--border);
             border-radius: 5px;
@@ -238,6 +265,11 @@
             .icon-theme-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+
+            .shortcut-row {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 8px;
+            }
         }
     </style>
 </head>
@@ -293,7 +325,7 @@
             <div class="setting shortcut-setting">
                 <span>
                     <span class="label">Keyboard shortcuts</span>
-                    <span id="shortcut-detail" class="detail">Click the shortcut field, then press Ctrl, Alt, or Meta plus a letter or number.</span>
+                    <span id="shortcut-detail" class="detail">Click a shortcut field, then press a key combination or mouse button 4/5.</span>
                 </span>
             </div>
 
@@ -301,19 +333,41 @@
                 <div class="shortcut-row">
                     <span>Send context to LLM</span>
                     <span class="shortcut-controls">
-                        <input id="shortcut-send-context" class="shortcut-key" type="text" readonly placeholder="Press keys">
-                        <button id="shortcut-send-context-remove" class="shortcut-button" type="button">Remove</button>
-                        <button id="shortcut-send-context-reset" class="shortcut-button" type="button">Default</button>
-                        <span id="shortcut-send-context-error" class="shortcut-error" role="alert"></span>
+                        <span class="shortcut-bindings">
+                            <span class="shortcut-binding">
+                                <input id="shortcut-send-context" class="shortcut-key" type="text" readonly placeholder="Press a shortcut">
+                                <button id="shortcut-send-context-remove" class="shortcut-button" type="button">Remove</button>
+                                <span id="shortcut-send-context-error" class="shortcut-error" role="alert"></span>
+                            </span>
+                            <span id="shortcut-send-context-2-slot" class="shortcut-binding" hidden>
+                                <input id="shortcut-send-context-2" class="shortcut-key" type="text" readonly placeholder="Press a shortcut">
+                                <button id="shortcut-send-context-remove-2" class="shortcut-button" type="button">Remove</button>
+                                <span id="shortcut-send-context-error-2" class="shortcut-error" role="alert"></span>
+                            </span>
+                        </span>
+                        <span class="shortcut-actions">
+                            <button id="shortcut-send-context-add" class="shortcut-button" type="button">Add</button>
+                        </span>
                     </span>
                 </div>
                 <div class="shortcut-row">
                     <span>Smart return to coding page</span>
                     <span class="shortcut-controls">
-                        <input id="shortcut-smart-return" class="shortcut-key" type="text" readonly placeholder="Press keys">
-                        <button id="shortcut-smart-return-remove" class="shortcut-button" type="button">Remove</button>
-                        <button id="shortcut-smart-return-reset" class="shortcut-button" type="button">Default</button>
-                        <span id="shortcut-smart-return-error" class="shortcut-error" role="alert"></span>
+                        <span class="shortcut-bindings">
+                            <span class="shortcut-binding">
+                                <input id="shortcut-smart-return" class="shortcut-key" type="text" readonly placeholder="Press a shortcut">
+                                <button id="shortcut-smart-return-remove" class="shortcut-button" type="button">Remove</button>
+                                <span id="shortcut-smart-return-error" class="shortcut-error" role="alert"></span>
+                            </span>
+                            <span id="shortcut-smart-return-2-slot" class="shortcut-binding" hidden>
+                                <input id="shortcut-smart-return-2" class="shortcut-key" type="text" readonly placeholder="Press a shortcut">
+                                <button id="shortcut-smart-return-remove-2" class="shortcut-button" type="button">Remove</button>
+                                <span id="shortcut-smart-return-error-2" class="shortcut-error" role="alert"></span>
+                            </span>
+                        </span>
+                        <span class="shortcut-actions">
+                            <button id="shortcut-smart-return-add" class="shortcut-button" type="button">Add</button>
+                        </span>
                     </span>
                 </div>
             </div>

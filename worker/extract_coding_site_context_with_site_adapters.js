@@ -73,7 +73,22 @@ const ExercismAdapter = {
             throw new Error(reason);
         };
 
-        const state = await readState();
+        // replaceCode dispatches input/change immediately before this workflow
+        // starts. Let React commit that new file state before interpreting two
+        // disabled buttons as "no changes to test".
+        const initialStateDeadline = performance.now() + 2000;
+        let state = await readState();
+
+        while (
+            state?.editor &&
+            state.runTestsDisabled &&
+            state.submitDisabled &&
+            !state.running &&
+            performance.now() < initialStateDeadline
+        ) {
+            await sleep(50);
+            state = await readState();
+        }
 
         if (!state?.editor) {
             throw new Error("Exercism editor footer not found.");
@@ -684,10 +699,29 @@ const SourceFallbackAdapter = {
             const response = await fetch(location.href, {
                 credentials: "include"
             });
+            const source = await response.text();
+            const contentType = response.headers?.get("content-type") || "";
+
+            if (!/text\/html/i.test(contentType)) {
+                return {
+                    title: document.title.trim() || location.href,
+                    source
+                };
+            }
+
+            const parsed = new DOMParser().parseFromString(source, "text/html");
+            parsed.querySelectorAll(
+                "script, style, template, noscript, svg"
+            ).forEach(element => element.remove());
+            const text = (parsed.body?.innerText || parsed.body?.textContent || "")
+                .replace(/\r\n?/g, "\n")
+                .replace(/[ \t]+\n/g, "\n")
+                .replace(/\n{3,}/g, "\n\n")
+                .trim();
 
             return {
                 title: document.title.trim() || location.href,
-                source: await response.text()
+                source: text
             };
         });
 

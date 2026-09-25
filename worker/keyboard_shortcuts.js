@@ -18,10 +18,18 @@ const LLM_HOSTS = new Set([
     "deepai.org"
 ]);
 let shortcutHeld = false;
-let shortcuts = { ...DEFAULT_SHORTCUTS };
+let heldShortcut = "";
+let shortcuts = normalizeShortcuts();
 
 function shortcutMatches(event, shortcut) {
     if (!shortcut) {
+        return false;
+    }
+
+    if (shortcut === "Mouse4" || shortcut === "Mouse5") {
+        return event.type === "mousedown" && event.button === (shortcut === "Mouse4" ? 3 : 4);
+    }
+    if (event.type === "mousedown") {
         return false;
     }
 
@@ -54,9 +62,45 @@ function normalizeShortcuts(saved = {}) {
     return Object.fromEntries(
         Object.keys(DEFAULT_SHORTCUTS).map(name => [
             name,
-            saved[name] ?? legacyShortcut ?? DEFAULT_SHORTCUTS[name]
+            normalizeShortcutList(saved[name] ?? legacyShortcut ?? DEFAULT_SHORTCUTS[name])
         ])
     );
+}
+
+function normalizeShortcutList(value) {
+    const bindings = Array.isArray(value) ? value : value ? [value] : [];
+    return bindings.filter(binding => typeof binding === "string").slice(0, 2);
+}
+
+function triggerShortcut(event, command, binding) {
+    shortcutHeld = true;
+    heldShortcut = binding;
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+        chrome.runtime.sendMessage({ type: "keyboard-shortcut", command });
+    } catch (_) {
+        shortcutHeld = false;
+        heldShortcut = "";
+    }
+}
+
+function releaseShortcut() {
+    shortcutHeld = false;
+    heldShortcut = "";
+    try {
+        chrome.runtime.sendMessage({ type: "keyboard-shortcut-release" });
+    } catch (_) {
+        // The extension context may disappear while an existing tab remains open.
+    }
+}
+
+function getBindingKey(binding) {
+    const parts = binding.split("+");
+    while (["Ctrl", "Alt", "Shift", "Meta"].includes(parts[0])) {
+        parts.shift();
+    }
+    return parts.join("+");
 }
 
 chrome.storage.onChanged?.addListener((changes, areaName) => {
@@ -79,36 +123,44 @@ document.addEventListener("keydown", event => {
     const command = LLM_HOSTS.has(location.hostname)
         ? "smart-return"
         : "send-context";
-    if (!shortcutMatches(event, shortcuts[command])) {
+    const binding = shortcuts[command].find(shortcut => shortcutMatches(event, shortcut));
+    if (!binding) {
         return;
     }
 
-    shortcutHeld = true;
-    event.preventDefault();
-    event.stopPropagation();
-    try {
-        chrome.runtime.sendMessage({ type: "keyboard-shortcut", command });
-    } catch (_) {
-        shortcutHeld = false;
+    triggerShortcut(event, command, binding);
+}, true);
+
+document.addEventListener("mousedown", event => {
+    if (shortcutHeld) {
+        return;
+    }
+
+    const command = LLM_HOSTS.has(location.hostname)
+        ? "smart-return"
+        : "send-context";
+    const binding = shortcuts[command].find(shortcut => shortcutMatches(event, shortcut));
+    if (binding) {
+        triggerShortcut(event, command, binding);
     }
 }, true);
 
 document.addEventListener("keyup", event => {
-    if (!shortcutHeld) {
+    if (!shortcutHeld || heldShortcut.startsWith("Mouse")) {
         return;
     }
 
-    const matchesShortcut = Object.values(shortcuts).some(shortcut => {
-        const key = shortcut?.split("+").at(-1);
-        return key && getEventKey(event).toUpperCase() === key.toUpperCase();
-    });
+    if (getEventKey(event).toUpperCase() === getBindingKey(heldShortcut).toUpperCase()) {
+        releaseShortcut();
+    }
+}, true);
 
-    if (matchesShortcut) {
-        shortcutHeld = false;
-        try {
-            chrome.runtime.sendMessage({ type: "keyboard-shortcut-release" });
-        } catch (_) {
-            // The extension context may disappear while an existing tab remains open.
-        }
+document.addEventListener("mouseup", event => {
+    if (!shortcutHeld || !heldShortcut.startsWith("Mouse")) {
+        return;
+    }
+
+    if (event.button === (heldShortcut === "Mouse4" ? 3 : 4)) {
+        releaseShortcut();
     }
 }, true);

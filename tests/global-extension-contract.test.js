@@ -26,7 +26,8 @@ test("keeps extension commands and content scripts registered", () => {
     });
     assert.deepEqual(manifest.content_scripts[0].js, [
         "worker/exercism/edit/content.js",
-        "worker/exercism/edit/auto_submit_after_manual_run.js"
+        "worker/exercism/edit/auto_submit_after_manual_run.js",
+        "worker/exercism/edit/continue_after_exercism_modals.js"
     ]);
     assert.deepEqual(
         manifest.content_scripts[1].js,
@@ -245,17 +246,18 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
     assert.match(workflowSource, markCompleteMessageType);
 });
 
-test("registers the concepts scroll-restoration script on Exercism concepts pages", () => {
-    const conceptsScript = readManifest().content_scripts.find(script =>
+test("registers shared list scroll restoration on Exercism track list pages", () => {
+    const trackListScript = readManifest().content_scripts.find(script =>
         script.js.includes(
-            "worker/exercism/concepts/preserve_concepts_scroll_position.js"
+            "worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js"
         )
     );
 
-    assert.deepEqual(conceptsScript.matches, [
-        "https://exercism.org/tracks/*/concepts*"
+    assert.deepEqual(trackListScript.matches, [
+        "https://exercism.org/tracks/*/concepts*",
+        "https://exercism.org/tracks/*/exercises*"
     ]);
-    assert.equal(conceptsScript.run_at, "document_start");
+    assert.equal(trackListScript.run_at, "document_start");
 });
 
 test("keeps the extension icon assets registered", () => {

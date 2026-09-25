@@ -1,32 +1,35 @@
 /* @machine
-file: worker/exercism/concepts/preserve_concepts_scroll_position.js
-role: preserve the Exercism concepts page scroll position across reloads
-scope: Exercism track concepts pages only
+file: worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js
+role: preserve Exercism track-list scroll position across reloads
+scope: Exercism track concepts and exercises list pages only
 */
 
-const EXERCISM_CONCEPTS_PATH_PATTERN = /^\/tracks\/[^/]+\/concepts\/?$/;
+const EXERCISM_TRACK_LIST_PATH_PATTERN =
+    /^\/tracks\/[^/]+\/(?:concepts|exercises)\/?$/;
 
-if (EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
+if (EXERCISM_TRACK_LIST_PATH_PATTERN.test(location.pathname)) {
     const RESTORE_WINDOW_MS = 10000;
     let restoring = false;
     let restorePosition = null;
     let restoreTimeoutId = null;
     let restoreFramePending = false;
 
+    function scrollStorageKey() {
+        return `codingSite2LlmExercismTrackListScroll:${location.pathname}${location.search}`;
+    }
+
     function saveScrollPosition() {
-        if (restoring || !EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
+        if (restoring || !EXERCISM_TRACK_LIST_PATH_PATTERN.test(location.pathname)) {
             return;
         }
 
         try {
-            const scrollStorageKey =
-                `codingSite2LlmExercismConceptsScroll:${location.pathname}`;
-            sessionStorage.setItem(scrollStorageKey, String(window.scrollY));
+            sessionStorage.setItem(scrollStorageKey(), String(window.scrollY));
         } catch (_) {}
     }
 
     function restoreScrollPosition() {
-        if (!EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
+        if (!EXERCISM_TRACK_LIST_PATH_PATTERN.test(location.pathname)) {
             stopRestoring();
             return;
         }
@@ -34,9 +37,7 @@ if (EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
         let savedPosition;
 
         try {
-            const scrollStorageKey =
-                `codingSite2LlmExercismConceptsScroll:${location.pathname}`;
-            const storedPosition = sessionStorage.getItem(scrollStorageKey);
+            const storedPosition = sessionStorage.getItem(scrollStorageKey());
             if (storedPosition === null) {
                 return;
             }
@@ -64,7 +65,7 @@ if (EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
     }
 
     function scheduleScrollRestore() {
-        if (!EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
+        if (!EXERCISM_TRACK_LIST_PATH_PATTERN.test(location.pathname)) {
             stopRestoring();
             return;
         }
@@ -76,7 +77,7 @@ if (EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
         restoreFramePending = true;
         requestAnimationFrame(() => {
             restoreFramePending = false;
-            if (restoring && EXERCISM_CONCEPTS_PATH_PATTERN.test(location.pathname)) {
+            if (restoring && EXERCISM_TRACK_LIST_PATH_PATTERN.test(location.pathname)) {
                 window.scrollTo(0, restorePosition);
             } else if (restoring) {
                 stopRestoring();

@@ -52,12 +52,12 @@ function loadWorker() {
     return context;
 }
 
-function loadKeyboardShortcuts(hostname = "example.com") {
+function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}) {
     const listeners = [];
     const messages = [];
     const context = vm.createContext({
         chrome: {
-            storage: { local: { get: async () => ({}) } },
+            storage: { local: { get: async () => ({ codingSite2LlmShortcuts: savedShortcuts }) } },
             runtime: { sendMessage: message => messages.push(message) }
         },
         document: { addEventListener: (type, listener) => listeners.push({ type, listener }) },
@@ -97,6 +97,18 @@ test("supports Alt and Shift in shortcut matching", () => {
         "shortcutMatches({ key: '+', code: 'Equal', ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }, 'Ctrl++')",
         context
     ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ type: 'mousedown', button: 3 }, 'Mouse4')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "shortcutMatches({ type: 'mousedown', button: 4 }, 'Mouse5')",
+        context
+    ), true);
+    assert.equal(vm.runInContext(
+        "JSON.stringify(normalizeShortcuts({ 'send-context': 'Alt+K', 'smart-return': ['Mouse4', 'Mouse5', 'Ctrl+R'] }))",
+        context
+    ), JSON.stringify({ "send-context": ["Alt+K"], "smart-return": ["Mouse4", "Mouse5"] }));
 });
 
 test("dispatches Smart Return synchronously on the first shortcut press", () => {
@@ -122,6 +134,36 @@ test("dispatches Smart Return synchronously on the first shortcut press", () => 
     assert.equal(messages.length, 1);
     assert.equal(messages[0].type, "keyboard-shortcut");
     assert.equal(messages[0].command, "smart-return");
+});
+
+test("dispatches Mouse4 once and releases the shortcut on mouseup", async () => {
+    const { listeners, messages } = loadKeyboardShortcuts("example.com", {
+        "send-context": ["Alt+Q", "Mouse4"],
+        "smart-return": ["Alt+Q"]
+    });
+    await Promise.resolve();
+    const mousedown = listeners.find(listener => listener.type === "mousedown").listener;
+    const mouseup = listeners.find(listener => listener.type === "mouseup").listener;
+    let prevented = false;
+    let stopped = false;
+    const event = {
+        type: "mousedown",
+        button: 3,
+        preventDefault: () => { prevented = true; },
+        stopPropagation: () => { stopped = true; }
+    };
+
+    mousedown(event);
+    mousedown(event);
+    mouseup({ type: "mouseup", button: 3 });
+
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+    assert.deepEqual(messages.map(message => message.type), [
+        "keyboard-shortcut",
+        "keyboard-shortcut-release"
+    ]);
+    assert.equal(messages[0].command, "send-context");
 });
 
 test("assembles title, description, feedback, and source", () => {
@@ -178,6 +220,71 @@ test("parses useful Exercism result feedback", () => {
     assert.match(feedback, /4 TEST FAILURES/);
     assert.match(feedback, /Expected: 2/);
     assert.match(feedback, /Actual: 1/);
+});
+
+test("filters HTML markup from generic web fallback text", async () => {
+    const context = loadWorker();
+    context.chrome.scripting.executeScript = async ({ func, args = [] }) => [{
+        result: await func(...args)
+    }];
+    const removedTags = [];
+    const html = "<html><body><p>Problem text</p><script>secret()</script></body></html>";
+    context.document = { title: "Example problem" };
+    context.location = { href: "https://example.com/problem" };
+    context.fetch = async () => ({
+        headers: { get: () => "text/html; charset=utf-8" },
+        text: async () => html
+    });
+    context.DOMParser = class {
+        parseFromString(markup, type) {
+            assert.equal(markup, html);
+            assert.equal(type, "text/html");
+            return {
+                body: { innerText: "Problem text", textContent: "Problem text" },
+                querySelectorAll: selector => {
+                    assert.equal(selector, "script, style, template, noscript, svg");
+                    return [
+                        { remove: () => removedTags.push("script") },
+                        { remove: () => removedTags.push("style") }
+                    ];
+                }
+            };
+        }
+    };
+
+    const result = await vm.runInContext(
+        "SourceFallbackAdapter.getContext(1)",
+        context
+    );
+
+    assert.equal(result.source, "Problem text");
+    assert.deepEqual(removedTags, ["script", "style"]);
+});
+
+test("preserves non-HTML source in generic web fallback", async () => {
+    const context = loadWorker();
+    context.chrome.scripting.executeScript = async ({ func, args = [] }) => [{
+        result: await func(...args)
+    }];
+    const source = "const lessThan = left < right;";
+    context.document = { title: "Plain source" };
+    context.location = { href: "https://example.com/source.txt" };
+    context.fetch = async () => ({
+        headers: { get: () => "text/plain; charset=utf-8" },
+        text: async () => source
+    });
+    context.DOMParser = class {
+        constructor() {
+            throw new Error("DOMParser should not be used for plain source");
+        }
+    };
+
+    const result = await vm.runInContext(
+        "SourceFallbackAdapter.getContext(1)",
+        context
+    );
+
+    assert.equal(result.source, source);
 });
 
 test("keeps all three Exercism feedback panels in order", () => {
@@ -302,6 +409,40 @@ test("returns and replaces code after an LLM copy event", async () => {
     );
 });
 
+test("clears consumed LLM copy when Smart Return submission fails", async () => {
+    const context = loadWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    context.chrome.tabs.update = async () => {};
+    context.chrome.scripting.executeScript = async ({ func }) => {
+        const source = func.toString();
+
+        if (source.includes("navigator.clipboard")) {
+            return [{ result: "fixed code" }];
+        }
+
+        if (source.includes("KeyboardEvent")) {
+            throw new Error("submission failed");
+        }
+
+        return [{ result: true }];
+    };
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism', copied: true, copiedText: 'fixed code' } }",
+        context
+    );
+
+    await assert.rejects(
+        vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context),
+        /submission failed/
+    );
+
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copied", context), false);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copiedText", context), "");
+});
+
 test("returns and replaces likely code when the LLM copy button emits no copy event", async () => {
     const context = loadWorker();
     context.tabState.push(
@@ -369,6 +510,65 @@ test("uses the Exercism test-and-submit adapter after replacing code", async () 
 
     submittedTabId = context.submittedTabId;
     assert.equal(submittedTabId, 10);
+});
+
+test("waits for Exercism editor state to reflect replaced code before running tests", async () => {
+    const context = loadWorker();
+    context.pageActions = [];
+    vm.runInContext(`
+        let stateReads = 0;
+        sleep = async () => {};
+        executePage = async (_tabId, pageFunction) => {
+            const source = pageFunction.toString();
+
+            if (source.includes("const runTests =")) {
+                const states = [
+                    {
+                        editor: true,
+                        runTestsDisabled: true,
+                        submitDisabled: true,
+                        running: false,
+                        failed: false
+                    },
+                    {
+                        editor: true,
+                        runTestsDisabled: false,
+                        submitDisabled: true,
+                        running: false,
+                        failed: false
+                    },
+                    {
+                        editor: true,
+                        runTestsDisabled: false,
+                        submitDisabled: false,
+                        running: false,
+                        failed: false
+                    }
+                ];
+                return states[Math.min(stateReads++, states.length - 1)];
+            }
+
+            if (source.includes("continue without waiting")) {
+                return { dismissed: true, leftEditor: false };
+            }
+
+            if (source.includes(".run-tests-btn button")) {
+                pageActions.push("run-tests");
+                return true;
+            }
+
+            if (source.includes(".submit-btn button")) {
+                pageActions.push("submit");
+                return { ok: true };
+            }
+
+            return true;
+        };
+    `, context);
+
+    await vm.runInContext("ExercismAdapter.testAndSubmit(10)", context);
+
+    assert.deepEqual(context.pageActions, ["run-tests", "submit"]);
 });
 
 test("deduplicates Exercism test-and-submit requests per tab", async () => {
@@ -462,4 +662,134 @@ test("captures Ctrl+Enter in the Exercism editor and sends the submit message", 
     assert.equal(messages.length, 1);
     assert.equal(messages[0].type, "exercism-test-submit");
     assert.deepEqual(prevented, ["default", "propagation", "immediate"]);
+});
+
+test("transitions Exercism edit page from Continue dialogs to no dialog state", () => {
+    const mutationCallbacks = [];
+
+    class Element {
+        constructor(tagName, innerText = "", options = {}) {
+            this.tagName = tagName;
+            this.innerText = innerText;
+            this.disabled = options.disabled || false;
+            this.attributes = options.attributes || {};
+            this.children = [];
+            this.parentElement = null;
+            this.clickCount = 0;
+        }
+
+        append(child) {
+            child.parentElement = this;
+            this.children.push(child);
+            return child;
+        }
+
+        remove() {
+            if (!this.parentElement) {
+                return;
+            }
+
+            this.parentElement.children = this.parentElement.children.filter(
+                child => child !== this
+            );
+            this.parentElement = null;
+            mutationCallbacks.forEach(callback => callback());
+        }
+
+        getBoundingClientRect() {
+            return { width: 100, height: 30 };
+        }
+
+        getAttribute(name) {
+            return this.attributes[name] || null;
+        }
+
+        click() {
+            this.clickCount += 1;
+            let dialog = this.parentElement;
+
+            while (dialog && dialog.getAttribute("role") !== "dialog") {
+                dialog = dialog.parentElement;
+            }
+
+            dialog?.remove();
+        }
+
+        querySelectorAll(selector) {
+            const matches = [];
+            const selectors = selector.split(", ");
+            const visit = node => {
+                for (const child of node.children) {
+                    if (
+                        selectors.includes(child.tagName) ||
+                        (selectors.includes("[role='button']") &&
+                            child.getAttribute("role") === "button") ||
+                        (selectors.includes("[role='dialog']") &&
+                            child.getAttribute("role") === "dialog")
+                    ) {
+                        matches.push(child);
+                    }
+                    visit(child);
+                }
+            };
+            visit(this);
+            return matches;
+        }
+    }
+
+    const body = new Element("body");
+    const documentElement = new Element("html");
+    documentElement.append(body);
+    const context = vm.createContext({
+        document: {
+            body,
+            documentElement,
+            addEventListener: () => {},
+            querySelectorAll: selector => body.querySelectorAll(selector)
+        },
+        MutationObserver: class {
+            constructor(callback) {
+                mutationCallbacks.push(callback);
+            }
+            observe() {}
+        }
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "edit", "continue_after_exercism_modals.js"),
+            "utf8"
+        ),
+        context
+    );
+
+    const addDialog = title => {
+        const dialog = body.append(new Element("section", "", {
+            attributes: { role: "dialog" }
+        }));
+        dialog.append(new Element("h2", title));
+        return {
+            dialog,
+            button: dialog.append(new Element("button", "Continue"))
+        };
+    };
+    const tutorial = addDialog("Dig Deeper into Reverse String!");
+    const feedback = addDialog("No Immediate Feedback");
+    const requestReview = feedback.dialog.append(
+        new Element("button", "Request code review")
+    );
+    const disabledContinue = body.append(
+        new Element("button", "Continue", { disabled: true })
+    );
+    const donationContinue = body.append(new Element("button", "Continue"));
+
+    assert.equal(body.querySelectorAll("[role='dialog']").length, 2);
+    mutationCallbacks[0]();
+
+    assert.equal(body.querySelectorAll("[role='dialog']").length, 0);
+    assert.equal(tutorial.button.clickCount, 1);
+    assert.equal(feedback.button.clickCount, 1);
+    assert.equal(requestReview.clickCount, 0);
+    assert.equal(disabledContinue.clickCount, 0);
+    assert.equal(donationContinue.clickCount, 0);
 });
