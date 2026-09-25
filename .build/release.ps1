@@ -71,9 +71,9 @@ if ($LASTEXITCODE -ne 0) {
 
 & gh release view $tag *> $null
 if ($LASTEXITCODE -eq 0) {
-    & gh release upload $tag $crxPath $zipPath --clobber
+    & gh release upload $tag $crxPath --clobber
 } else {
-    & gh release create $tag $crxPath $zipPath --title "Coding Site2LLM $tag" --generate-notes
+    & gh release create $tag $crxPath --title "Coding Site2LLM $tag" --generate-notes
 }
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to publish GitHub release $tag."

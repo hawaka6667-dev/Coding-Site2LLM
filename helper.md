@@ -244,6 +244,8 @@ npm run release         # 已提交版本的一键测试、打包、推送、打
 
 `npm run release` 仅从 `main` 发布已提交的 manifest version。它一次运行所有 release tests、生成 CRX/ZIP、推送 `main`、创建或复用同名 tag，并创建或更新 GitHub Release。`.codegraph/` 状态和 `.feedback/Snipaste_*` 本地截图不阻塞发布；其它未提交的文件会阻止发布，避免把不完整的功能误发出去。
 
+GitHub Release 仅上传 CRX。ZIP 仍会生成并保留在本地 `.build/`，作为网页安装不支持 CRX 时的后备产物；在确认不再需要前，不删除 ZIP 打包逻辑。
+
 ### 构建与发布目录
 
 ```text
