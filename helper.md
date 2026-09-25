@@ -239,7 +239,10 @@ npm run test:routing    # URL、provider 和 adapter 路由
 npm run test:contracts  # manifest、注入、Exercism wiring 和资源契约
 npm run dev:check       # Chrome、MCP、Service Worker、必要页面和文件入口
 npm run session:end     # 测试通过后 reload 扩展并刷新已有 coding/LLM 页面
+npm run release         # 已提交版本的一键测试、打包、推送、打 tag 和 GitHub Release 发布
 ```
+
+`npm run release` 仅从 `main` 发布已提交的 manifest version。它一次运行所有 release tests、生成 CRX/ZIP、推送 `main`、创建或复用同名 tag，并创建或更新 GitHub Release。`.codegraph/` 状态和 `.feedback/Snipaste_*` 本地截图不阻塞发布；其它未提交的文件会阻止发布，避免把不完整的功能误发出去。
 
 禁止在日常开发、功能修改和提交前验证中运行 `npm run test:all`。全量测试耗时过长；必须先从 `tests/` 中按改动职责选择最小覆盖测试，并优先使用对应的 `test:unit`、`test:routing` 或 `test:contracts`。只有用户明确要求全量测试时才可运行 `test:all`。
 

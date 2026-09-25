@@ -4,6 +4,8 @@
   "_comment": "test:all is intentionally disabled. Original: npm run test:unit && npm run test:routing && npm run test:contracts && npm run test:version",
   "scripts": {
     "package:crx": "powershell -ExecutionPolicy Bypass -File .build/package.ps1",
+    "release": "powershell -ExecutionPolicy Bypass -File .build/release.ps1",
+    "test:release": "node --test tests/fast-core-feature.test.js tests/popup-daily-practice.test.js tests/local-routing.test.js tests/global-extension-contract.test.js tests/version-contract.test.js",
     "dev:check": "powershell -ExecutionPolicy Bypass -File tests/dev-check.ps1",
     "session:end": "powershell -ExecutionPolicy Bypass -File tests/session-end.ps1",
     "test": "npm run test:unit",
