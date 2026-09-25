@@ -27,13 +27,15 @@ test("keeps extension commands and content scripts registered", () => {
     assert.deepEqual(manifest.content_scripts[0].js, [
         "worker/exercism/edit/content.js",
         "worker/exercism/edit/auto_submit_after_manual_run.js",
+        "worker/exercism/edit/return_to_editor_after_submit_redirect.js",
         "worker/exercism/edit/continue_after_exercism_modals.js"
     ]);
     assert.deepEqual(
         manifest.content_scripts[1].js,
         [
             "worker/exercism/overview/open_exercise_in_editor.js",
-            "worker/exercism/overview/auto_mark_exercise_complete.js"
+            "worker/exercism/overview/auto_mark_exercise_complete.js",
+            "worker/exercism/overview/dismiss_exercism_overview_closable_dialogs.js"
         ]
     );
     assert.equal(manifest.commands?.["exercism-test-submit"], undefined);

@@ -151,6 +151,7 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 仅发现可用的 `Mark as complete` 并请求完成链 | 是否进入 `/edit` |
 | `auto_submit_after_manual_run.js` | 监听用户 Run Tests 并请求提交链 | overview 跳转和完成按钮 |
+| `return_to_editor_after_submit_redirect.js` | 拦截 Submit 导致的同题 overview Turbo 跳转并留在 `/edit` | overview 的普通进入编辑器策略 |
 | `continue_after_exercism_modals.js` | 关闭 edit 页上可见、可用的 `Continue` 弹窗 | Submit 和 overview completion |
 | `content.js` | 编辑页快捷键桥接 | Exercism 状态推断 |
 

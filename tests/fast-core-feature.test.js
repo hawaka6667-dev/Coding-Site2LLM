@@ -664,6 +664,99 @@ test("captures Ctrl+Enter in the Exercism editor and sends the submit message", 
     assert.deepEqual(prevented, ["default", "propagation", "immediate"]);
 });
 
+test("returns to the same Exercism editor when Submit navigates to its overview", () => {
+    const listeners = [];
+    const replacements = [];
+    const document = {
+        addEventListener: (type, listener, capture) =>
+            listeners.push({ type, listener, capture })
+    };
+    let now = 1000;
+    const context = vm.createContext({
+        URL,
+        Date: { now: () => now },
+        document,
+        location: {
+            href: "https://exercism.org/tracks/python/exercises/pov/edit",
+            replace: url => replacements.push(url)
+        }
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(
+                ROOT_DIR,
+                "worker",
+                "exercism",
+                "edit",
+                "return_to_editor_after_submit_redirect.js"
+            ),
+            "utf8"
+        ),
+        context
+    );
+
+    const submitClickListener = listeners.find(listener => listener.type === "click");
+    const beforeVisitListener = listeners.find(
+        listener => listener.type === "turbo:before-visit"
+    );
+    const submitButton = { disabled: false };
+    const clickEvent = {
+        target: { closest: selector =>
+            selector === ".lhs-footer .submit-btn button" ? submitButton : null
+        }
+    };
+    submitClickListener.listener(clickEvent);
+
+    const overviewVisit = {
+        detail: {
+            url: "https://exercism.org/tracks/python/exercises/pov"
+        },
+        prevented: false,
+        preventDefault() {
+            this.prevented = true;
+        }
+    };
+    beforeVisitListener.listener(overviewVisit);
+
+    assert.equal(overviewVisit.prevented, true);
+    assert.deepEqual(replacements, [
+        "https://exercism.org/tracks/python/exercises/pov/edit"
+    ]);
+
+    const nextOverviewVisit = {
+        detail: {
+            url: "https://exercism.org/tracks/python/exercises/pov"
+        },
+        prevented: false,
+        preventDefault() {
+            this.prevented = true;
+        }
+    };
+    beforeVisitListener.listener(nextOverviewVisit);
+    assert.equal(nextOverviewVisit.prevented, false);
+    assert.equal(replacements.length, 1);
+
+    submitClickListener.listener(clickEvent);
+    now += 1;
+    const loadedOverviewListener = listeners.find(
+        listener => listener.type === "turbo:load"
+    );
+    context.location.href = "https://exercism.org/tracks/python/exercises/other";
+    loadedOverviewListener.listener();
+    assert.equal(replacements.length, 1);
+
+    context.location.href = "https://exercism.org/tracks/python/exercises/pov/edit";
+    submitClickListener.listener(clickEvent);
+    context.location.href = "https://exercism.org/tracks/python/exercises/pov";
+    loadedOverviewListener.listener();
+
+    assert.deepEqual(replacements, [
+        "https://exercism.org/tracks/python/exercises/pov/edit",
+        "https://exercism.org/tracks/python/exercises/pov/edit"
+    ]);
+});
+
 test("transitions Exercism edit page from Continue dialogs to no dialog state", () => {
     const mutationCallbacks = [];
 
