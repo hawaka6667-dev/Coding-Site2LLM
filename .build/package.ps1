@@ -1,6 +1,6 @@
 <#
-Creates the current version's CRX and ZIP in .build/dist/.
-The stable signing key lives only in ignored .build/secrets/.
+Creates the current version's CRX and ZIP in .build/.
+The stable signing key lives only in ignored .build/.
 #>
 param(
     [string]$OutputDirectory
@@ -10,12 +10,11 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $manifest = Get-Content -Raw -Path (Join-Path $projectRoot "manifest.json") | ConvertFrom-Json
 $version = $manifest.version
-$keyDirectory = Join-Path $PSScriptRoot "secrets"
-$keyPath = Join-Path $keyDirectory "coding-site2llm.pem"
+$keyPath = Join-Path $PSScriptRoot "coding-site2llm.pem"
 $outputDirectory = if ($OutputDirectory) {
     [System.IO.Path]::GetFullPath($OutputDirectory)
 } else {
-    Join-Path $PSScriptRoot "dist"
+    $PSScriptRoot
 }
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "coding-site2llm-$version-$PID"
 $extensionRoot = Join-Path $tempRoot "extension"
@@ -39,7 +38,7 @@ $filesToCopy = @(
     "worker"
 )
 
-New-Item -ItemType Directory -Force -Path $extensionRoot, $keyDirectory, $outputDirectory | Out-Null
+New-Item -ItemType Directory -Force -Path $extensionRoot, $outputDirectory | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $outputDirectory "Coding-Site2LLM-*.crx")
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $outputDirectory "Coding-Site2LLM-*.zip")
 

@@ -9,7 +9,7 @@ Set-Location $projectRoot
 $manifest = Get-Content -Raw "manifest.json" | ConvertFrom-Json
 $version = $manifest.version
 $tag = "v$version"
-$artifactDirectory = Join-Path $PSScriptRoot "dist"
+$artifactDirectory = $PSScriptRoot
 $crxPath = Join-Path $artifactDirectory "Coding-Site2LLM-$tag.crx"
 $zipPath = Join-Path $artifactDirectory "Coding-Site2LLM-$tag.zip"
 
