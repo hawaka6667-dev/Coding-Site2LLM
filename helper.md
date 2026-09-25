@@ -247,12 +247,13 @@ npm run release         # 已提交版本的一键测试、打包、推送、打
 ### 构建与发布目录
 
 ```text
-scripts/   # 受版本控制的 package/release PowerShell scripts
-secrets/   # 本机唯一 CRX signing key，已忽略，不提交
-dist/      # 当前一次打包的 CRX/ZIP，已忽略，每次打包覆盖
+.build/package.ps1  # 受版本控制的打包脚本
+.build/release.ps1  # 受版本控制的发布脚本
+.build/secrets/     # 本机唯一 CRX signing key，已忽略，不提交
+.build/dist/        # 当前一次打包的 CRX/ZIP，已忽略，每次打包覆盖
 ```
 
-不要按版本保留本地产物或复制 signing key。版本历史和可下载产物由 Git tag 与 GitHub Release 保存；本地只保留一个稳定的 `secrets/coding-site2llm.pem`，保证后续 CRX 的扩展 ID 不变。
+不要按版本保留本地产物或复制 signing key。版本历史和可下载产物由 Git tag 与 GitHub Release 保存；本地只保留一个稳定的 `.build/secrets/coding-site2llm.pem`，保证后续 CRX 的扩展 ID 不变。
 
 禁止在日常开发、功能修改和提交前验证中运行 `npm run test:all`。全量测试耗时过长；必须先从 `tests/` 中按改动职责选择最小覆盖测试，并优先使用对应的 `test:unit`、`test:routing` 或 `test:contracts`。只有用户明确要求全量测试时才可运行 `test:all`。
 

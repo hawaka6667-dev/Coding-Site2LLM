@@ -1,6 +1,6 @@
 <#
-Creates the current version's CRX and ZIP in dist/.
-The stable signing key lives only in ignored secrets/.
+Creates the current version's CRX and ZIP in .build/dist/.
+The stable signing key lives only in ignored .build/secrets/.
 #>
 param(
     [string]$OutputDirectory
@@ -10,12 +10,12 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $manifest = Get-Content -Raw -Path (Join-Path $projectRoot "manifest.json") | ConvertFrom-Json
 $version = $manifest.version
-$keyDirectory = Join-Path $projectRoot "secrets"
+$keyDirectory = Join-Path $PSScriptRoot "secrets"
 $keyPath = Join-Path $keyDirectory "coding-site2llm.pem"
 $outputDirectory = if ($OutputDirectory) {
     [System.IO.Path]::GetFullPath($OutputDirectory)
 } else {
-    Join-Path $projectRoot "dist"
+    Join-Path $PSScriptRoot "dist"
 }
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "coding-site2llm-$version-$PID"
 $extensionRoot = Join-Path $tempRoot "extension"

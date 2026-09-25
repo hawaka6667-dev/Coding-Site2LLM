@@ -26,14 +26,14 @@ test("uses the version policy documented in helper.md", () => {
     assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
     assert.equal(
         packageJson.scripts["package:crx"],
-        "powershell -ExecutionPolicy Bypass -File scripts/package-extension.ps1"
+        "powershell -ExecutionPolicy Bypass -File .build/package.ps1"
     );
     assert.equal(
         packageJson.scripts.release,
-        "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
+        "powershell -ExecutionPolicy Bypass -File .build/release.ps1"
     );
-    assert.equal(fs.existsSync(path.join(ROOT_DIR, "scripts", "package-extension.ps1")), true);
-    assert.equal(fs.existsSync(path.join(ROOT_DIR, "scripts", "release.ps1")), true);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "package.ps1")), true);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "release.ps1")), true);
 });
 
 test("current feature release advances beyond the previous release tag", () => {

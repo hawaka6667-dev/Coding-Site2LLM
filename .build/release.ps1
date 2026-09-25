@@ -9,7 +9,7 @@ Set-Location $projectRoot
 $manifest = Get-Content -Raw "manifest.json" | ConvertFrom-Json
 $version = $manifest.version
 $tag = "v$version"
-$artifactDirectory = Join-Path $projectRoot "dist"
+$artifactDirectory = Join-Path $PSScriptRoot "dist"
 $crxPath = Join-Path $artifactDirectory "Coding-Site2LLM-$tag.crx"
 $zipPath = Join-Path $artifactDirectory "Coding-Site2LLM-$tag.zip"
 
@@ -38,7 +38,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Release tests failed."
 }
 
-& (Join-Path $PSScriptRoot "package-extension.ps1") -OutputDirectory $artifactDirectory
+& (Join-Path $PSScriptRoot "package.ps1") -OutputDirectory $artifactDirectory
 if ($LASTEXITCODE -ne 0) {
     throw "Extension packaging failed."
 }
