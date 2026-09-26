@@ -52,7 +52,7 @@ function loadWorker() {
     return context;
 }
 
-function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}) {
+function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}, selectedText = "") {
     const listeners = [];
     const messages = [];
     const context = vm.createContext({
@@ -61,6 +61,7 @@ function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}) {
             runtime: { sendMessage: message => messages.push(message) }
         },
         document: { addEventListener: (type, listener) => listeners.push({ type, listener }) },
+        window: { getSelection: () => ({ toString: () => selectedText }) },
         location: { hostname }
     });
     vm.runInContext(
@@ -136,6 +137,30 @@ test("dispatches Smart Return synchronously on the first shortcut press", () => 
     assert.equal(messages[0].command, "smart-return");
 });
 
+test("includes selected page text in the send-context shortcut message", () => {
+    const { listeners, messages } = loadKeyboardShortcuts(
+        "example.com",
+        {},
+        "  selected problem text  "
+    );
+    const keydown = listeners.find(listener => listener.type === "keydown").listener;
+
+    keydown({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat: false,
+        preventDefault: () => {},
+        stopPropagation: () => {}
+    });
+
+    assert.equal(messages[0].command, "send-context");
+    assert.equal(messages[0].selectedText, "  selected problem text  ");
+});
+
 test("dispatches Mouse4 once and releases the shortcut on mouseup", async () => {
     const { listeners, messages } = loadKeyboardShortcuts("example.com", {
         "send-context": ["Alt+Q", "Mouse4"],
@@ -177,6 +202,52 @@ test("assembles title, description, feedback, and source", () => {
     assert.match(prompt, /Find the closest points\./);
     assert.match(prompt, /Failed: 2/);
     assert.match(prompt, /def closest\(points\): pass/);
+});
+
+test("sends selected text instead of page context and keeps full context as the default", async () => {
+    const context = loadWorker();
+    context.tabState.push({
+        id: 10,
+        windowId: 1,
+        index: 0,
+        active: true,
+        url: "https://leetcode.com/problems/two-sum/"
+    });
+    context.tabState.push({
+        id: 20,
+        windowId: 1,
+        index: 1,
+        url: "https://chat.deepseek.com/"
+    });
+    context.chrome.storage = {
+        local: { get: async () => ({ selectedLlmProvider: "DeepSeek" }) }
+    };
+    context.insertedPrompts = [];
+    context.contextReads = 0;
+    context.findLlmTab = async () => ({ tab: { id: 20 }, provider: { name: "DeepSeek" } });
+    context.waitForDeepSeekInput = async () => {};
+    context.insertText = async (_tabId, prompt) => context.insertedPrompts.push(prompt);
+    context.keyTap = async () => {};
+    context.scrollUp = async () => {};
+    context.saveReturnRoute = async () => {};
+    vm.runInContext(`LeetCodeAdapter.getContext = async () => {
+        contextReads += 1;
+        return {
+            platform: "LeetCode",
+            title: "Two Sum",
+            description: "Find two numbers.",
+            source: "const answer = 1;"
+        };
+    }`, context);
+
+    await vm.runInContext("runWorkflow('  selected code  ')", context);
+    await vm.runInContext("runWorkflow()", context);
+
+    assert.deepEqual(context.insertedPrompts, [
+        "  selected code  ",
+        "Two Sum\n\nFind two numbers.\n\nconst answer = 1;"
+    ]);
+    assert.equal(context.contextReads, 1);
 });
 
 test("diagnoses context field presence and lengths without exposing values", () => {
@@ -667,15 +738,25 @@ test("captures Ctrl+Enter in the Exercism editor and sends the submit message", 
 test("returns to the same Exercism editor when Submit navigates to its overview", () => {
     const listeners = [];
     const replacements = [];
+    const messages = [];
+    const backToExerciseLink = {
+        innerText: "Back to Exercise",
+        href: "https://exercism.org/tracks/python/exercises/pov?from=editor",
+        offsetWidth: 100,
+        offsetHeight: 20,
+        getAttribute: () => null
+    };
     const document = {
         addEventListener: (type, listener, capture) =>
-            listeners.push({ type, listener, capture })
+            listeners.push({ type, listener, capture }),
+        querySelectorAll: () => [backToExerciseLink]
     };
     let now = 1000;
     const context = vm.createContext({
         URL,
         Date: { now: () => now },
         document,
+        chrome: { runtime: { sendMessage: message => messages.push(message) } },
         location: {
             href: "https://exercism.org/tracks/python/exercises/pov/edit",
             replace: url => replacements.push(url)
@@ -723,6 +804,10 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
     assert.deepEqual(replacements, [
         "https://exercism.org/tracks/python/exercises/pov/edit"
     ]);
+    assert.equal(JSON.stringify(messages), JSON.stringify([{
+        type: "exercism-open-submitted-overview",
+        overviewUrl: "https://exercism.org/tracks/python/exercises/pov?from=editor"
+    }]));
 
     const nextOverviewVisit = {
         detail: {
@@ -736,6 +821,7 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
     beforeVisitListener.listener(nextOverviewVisit);
     assert.equal(nextOverviewVisit.prevented, false);
     assert.equal(replacements.length, 1);
+    assert.equal(messages.length, 1);
 
     submitClickListener.listener(clickEvent);
     now += 1;
@@ -755,10 +841,12 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
         "https://exercism.org/tracks/python/exercises/pov/edit",
         "https://exercism.org/tracks/python/exercises/pov/edit"
     ]);
+    assert.equal(messages.length, 2);
 });
 
 test("transitions Exercism edit page from Continue dialogs to no dialog state", () => {
     const mutationCallbacks = [];
+        let observerOptions;
 
     class Element {
         constructor(tagName, innerText = "", options = {}) {
@@ -844,7 +932,9 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
             constructor(callback) {
                 mutationCallbacks.push(callback);
             }
-            observe() {}
+                observe(_target, options) {
+                    observerOptions = options;
+                }
         }
     });
 
@@ -856,18 +946,23 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
         context
     );
 
-    const addDialog = title => {
+    const addDialog = (title, buttonLabel = "Continue", buttonOptions = {}) => {
         const dialog = body.append(new Element("section", "", {
             attributes: { role: "dialog" }
         }));
         dialog.append(new Element("h2", title));
         return {
             dialog,
-            button: dialog.append(new Element("button", "Continue"))
+            button: dialog.append(new Element("button", buttonLabel, buttonOptions))
         };
     };
     const tutorial = addDialog("Dig Deeper into Reverse String!");
     const feedback = addDialog("No Immediate Feedback");
+    const delayedFeedback = addDialog(
+        "Automated feedback is still being generated",
+        "Continue without waiting",
+        { disabled: true }
+    );
     const requestReview = feedback.dialog.append(
         new Element("button", "Request code review")
     );
@@ -876,12 +971,20 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
     );
     const donationContinue = body.append(new Element("button", "Continue"));
 
-    assert.equal(body.querySelectorAll("[role='dialog']").length, 2);
+    assert.equal(observerOptions.attributes, true);
+    assert.deepEqual(Array.from(observerOptions.attributeFilter), ["disabled", "aria-disabled"]);
+    assert.equal(body.querySelectorAll("[role='dialog']").length, 3);
+    mutationCallbacks[0]();
+
+    assert.equal(body.querySelectorAll("[role='dialog']").length, 1);
+    assert.equal(tutorial.button.clickCount, 1);
+    assert.equal(feedback.button.clickCount, 1);
+    assert.equal(delayedFeedback.button.clickCount, 0);
+    delayedFeedback.button.disabled = false;
     mutationCallbacks[0]();
 
     assert.equal(body.querySelectorAll("[role='dialog']").length, 0);
-    assert.equal(tutorial.button.clickCount, 1);
-    assert.equal(feedback.button.clickCount, 1);
+    assert.equal(delayedFeedback.button.clickCount, 1);
     assert.equal(requestReview.clickCount, 0);
     assert.equal(disabledContinue.clickCount, 0);
     assert.equal(donationContinue.clickCount, 0);

@@ -34,7 +34,8 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | URL routing 和 site routing | `worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
 | Exercism overview redirect and completion confirmation | `worker/exercism/overview/open_exercise_in_editor.js`, `worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism editor bridge, submission, and Continue dialogs | `worker/exercism/edit/content.js`, `worker/exercism/edit/auto_submit_after_manual_run.js`, `worker/exercism/edit/continue_after_exercism_modals.js` | `npm run test:unit` 和 `npm run test:contracts` |
+| Exercism editor bridge and submission | `worker/exercism/edit/content.js`, `worker/extract_coding_site_context_with_site_adapters.js`, `worker/run_coding_context_to_llm_workflow.js`, `worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:routing` |
+| Exercism Continue dialogs | `worker/exercism/edit/continue_after_exercism_modals.js`, `tests/fast-core-feature.test.js` | `npm run test:unit` |
 | popup daily-practice entry | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
 | extension injection 和 manifest | `manifest.json`, `worker/` | `npm run test:contracts` |
 | development environment 和 entry points | `tests/dev-check.ps1`, `package.json`, `manifest.json` | `npm run dev:check` |
@@ -124,6 +125,8 @@ send-context  : coding page -> LLM page
 smart-return  : LLM page -> source coding page
 ```
 
+在 coding page 按下 `send-context` 时，若页面有非空鼠标选区，只发送选区原文并跳过整页 context 提取；没有选区时保持原有整页题目 context 发送流程。`smart-return` 不读取选区。
+
 默认均为 `Alt+Q`，配置保存在 `codingSite2LlmShortcuts`。动作名是业务契约，按键只是可替换的输入绑定。
 
 每个 action 最多有两个独立输入绑定；Options 默认显示一个，点击 Add 后才显示第二个。存储值为至多两个字符串组成的数组；读取旧版单字符串时迁移为单元素数组。键盘组合和鼠标侧键 `Mouse4` / `Mouse5` 都是有效绑定。
@@ -147,7 +150,7 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `extract_coding_site_context_with_site_adapters.js` | adapter、页面提取、过滤、prompt 数据 | 跨页面导航策略 |
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
 | `find_llm_tab_and_insert_prompt.js` | 找到指定 provider 并插入 prompt | 站点状态判断 |
-| `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由 | 站点专属 selector |
+| `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由；已确认的 Exercism 提交可在自动完成开启时后台打开同题 overview | 站点专属 selector |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 仅发现可用的 `Mark as complete` 并请求完成链 | 是否进入 `/edit` |
 | `auto_submit_after_manual_run.js` | 监听用户 Run Tests 并请求提交链 | overview 跳转和完成按钮 |
@@ -203,6 +206,12 @@ Run Tests（按钮可用时）
 
 - `.lhs-footer .run-tests-btn button`
 - `.lhs-footer .submit-btn button`
+
+`continue_after_exercism_modals.js` 只检查可见 dialog 中的按钮，支持 `Continue` 与 `Continue without waiting`；除 dialog 子节点变化外，还监听 `disabled` 和 `aria-disabled` 属性变化，以便按钮一变为可用就继续。`tests/fast-core-feature.test.js` 覆盖延迟启用到关闭 dialog 的状态转换。
+
+自动完成链必须区分 iteration passed 与 exercise completed。`Exercise Solved` 只表示提交的 iteration 通过，不能单独作为完成成功信号；完成链只在 overview 状态为 `completed` 或出现可见的完成结果对话框后返回成功。`tests/local-routing.test.js` 覆盖条件按钮出现 → 发起完成请求 → 确认弹窗 → 完成结果输出，并断言结果出现前不刷新 track concepts。
+
+**【待真实流程验证】** 最新 Run Tests 通过并完成 Submit 后，Exercism 会发起同题 overview 的 Turbo 导航。`return_to_editor_after_submit_redirect.js` 从 `Back to Exercise` 链接读取实际 `href`，通知 Service Worker 在未聚焦的新窗口打开同题 overview，同时把原标签留在 `/edit`，避免新增标签挤占当前窗口。Service Worker 只接受同源、同题 URL；`exercismAutoMarkComplete` 关闭时不创建 overview 窗口。overview 的 `auto_mark_exercise_complete.js` 负责发现 `Mark as complete` 并运行完成确认链；确认成功及概念页刷新完成后，Service Worker 自动关闭 overview 标签及其窗口。代码和路由测试已覆盖未聚焦新窗口；真实浏览器中的提交流程与关闭行为仍待验证。
 
 不要按按钮文字匹配编辑页的 Run/Submit；tab 栏和结果面板存在同名文本。
 

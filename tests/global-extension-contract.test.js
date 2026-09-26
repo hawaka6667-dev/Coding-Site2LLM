@@ -248,6 +248,48 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
     assert.match(workflowSource, markCompleteMessageType);
 });
 
+test("continues past Exercism's automated-feedback check without waiting", () => {
+    const clicked = [];
+    const dialog = { tagName: "DIALOG", getAttribute: () => null };
+    const makeButton = label => ({
+        innerText: label,
+        parentElement: dialog,
+        disabled: false,
+        getAttribute: () => null,
+        getBoundingClientRect: () => ({ width: 180, height: 32 }),
+        click: () => clicked.push(label)
+    });
+    const buttons = [
+        makeButton("Continue without waiting"),
+        makeButton("Not now")
+    ];
+    const document = {
+        documentElement: {},
+        querySelectorAll: () => buttons,
+        addEventListener: () => {}
+    };
+    const context = vm.createContext({
+        document,
+        MutationObserver: class {
+            observe() {}
+        }
+    });
+    const source = fs.readFileSync(
+        path.join(
+            ROOT_DIR,
+            "worker",
+            "exercism",
+            "edit",
+            "continue_after_exercism_modals.js"
+        ),
+        "utf8"
+    );
+
+    vm.runInContext(source, context);
+
+    assert.deepEqual(clicked, ["Continue without waiting"]);
+});
+
 test("registers shared list scroll restoration on Exercism track list pages", () => {
     const trackListScript = readManifest().content_scripts.find(script =>
         script.js.includes(

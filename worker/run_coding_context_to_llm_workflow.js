@@ -302,13 +302,13 @@ function findRightCodingTab(tabs, llmTab, sourcePlatform) {
         .sort((left, right) => left.index - right.index)[0] || null;
 }
 
-async function runWorkflow() {
+async function runWorkflow(selectedText = "") {
     if (workflowPromise) {
         console.warn("[workflow] Already running; ignoring duplicate trigger.");
         return workflowPromise;
     }
 
-    workflowPromise = runWorkflowOnce();
+    workflowPromise = runWorkflowOnce(selectedText);
 
     try {
         return await workflowPromise;
@@ -317,7 +317,7 @@ async function runWorkflow() {
     }
 }
 
-async function runWorkflowOnce() {
+async function runWorkflowOnce(selectedText = "") {
     const totalStart = performance.now();
 
     function mark(label, start) {
@@ -344,9 +344,14 @@ async function runWorkflowOnce() {
     console.log("[workflow] platform:", platform.name);
 
     start = performance.now();
-    const context = await platform.getContext(currentTab.id);
-    console.log("[workflow] context diagnostics:", diagnoseContext(context));
-    const prompt = buildPrompt(context);
+    let prompt;
+    if (typeof selectedText === "string" && selectedText.trim()) {
+        prompt = selectedText;
+    } else {
+        const context = await platform.getContext(currentTab.id);
+        console.log("[workflow] context diagnostics:", diagnoseContext(context));
+        prompt = buildPrompt(context);
+    }
     mark(`${platform.name}.getSource`, start);
     console.log("[workflow] prompt:", prompt.length, "characters");
 
@@ -428,6 +433,42 @@ async function runExercismTestSubmit(tabId, options) {
         if (exercismSubmitPromises.get(currentTab.id) === promise) {
             exercismSubmitPromises.delete(currentTab.id);
         }
+    }
+}
+
+async function openSubmittedExercismOverview(senderTab, overviewUrl) {
+    if (!senderTab?.id || typeof senderTab.url !== "string") {
+        return false;
+    }
+
+    const settings = await chrome.storage.local.get("exercismAutoMarkComplete");
+    if (settings.exercismAutoMarkComplete === false) {
+        return false;
+    }
+
+    try {
+        const editorUrl = new URL(senderTab.url);
+        const targetUrl = new URL(overviewUrl, senderTab.url);
+        const exercisePath = editorUrl.pathname.match(
+            /^\/tracks\/[^/]+\/exercises\/[^/]+\/edit\/?$/
+        );
+
+        if (
+            editorUrl.origin !== "https://exercism.org" ||
+            targetUrl.origin !== editorUrl.origin ||
+            !exercisePath ||
+            targetUrl.pathname !== exercisePath[0].replace(/\/edit\/?$/, "")
+        ) {
+            return false;
+        }
+
+        await chrome.windows.create({
+            url: targetUrl.href,
+            focused: false
+        });
+        return true;
+    } catch (_) {
+        return false;
     }
 }
 
@@ -566,7 +607,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         (async () => {
             if (command === "send-context") {
-                await runWorkflow();
+                await runWorkflow(message.selectedText);
             } else if (command === "smart-return" && tab) {
                 await returnToCodingPage(tab);
             }
@@ -610,6 +651,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
+    if (message?.type === "exercism-open-submitted-overview") {
+        openSubmittedExercismOverview(sender.tab, message.overviewUrl).catch(error => {
+            console.error("[exercism] overview tab ERROR:", error);
+        });
+        return;
+    }
+
     if (message?.type === "llm-copy") {
         recordLlmCopy(sender.tab?.id, message.text).catch(error => {
             console.error("[llm] copy tracking ERROR:", error);
@@ -627,7 +675,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
-    markCompleteAndRefreshConcepts(tabId, sender.tab.url).catch(error => {
-        console.error("[exercism] mark complete ERROR:", error);
-    });
+    markCompleteAndRefreshConcepts(tabId, sender.tab.url)
+        .then(completed => completed ? chrome.tabs.remove(tabId) : undefined)
+        .catch(error => {
+            console.error("[exercism] mark complete ERROR:", error);
+        });
 });

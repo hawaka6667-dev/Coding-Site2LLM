@@ -9,38 +9,39 @@ publish
 
 reload
 
-做一下简单cleanup，主要是readability  ❌
+做一下简单cleanup，主要是readability  ❌       review
 ---
 
-codewar回填支持
 neet支持
+codewar  回填没删除 没submit   
+ctf
 
 
-选中或者提交胜利以后
+选中或者提交胜利以后     
 
+静默mark as complete✔
+兜底源码是文字 html冲突✔➖
+png
 
-
-
-
+//////
 discord管理
-
 搭个做题平台
-
 ////
+
+
 下个版本
 开发者面板 + 外部管理
 
-静默mark as complete
+积木性测试
 
 当前有选择时    xxx + what is
-
       教程截图
 
       open all缓慢打开
       拖动垃圾桶     取消x              彩色tag式按钮/元素表
       跟随+
 
-      兜底但不包含html内容
+      兜底但不包含html内容✔
 
 网站包
 

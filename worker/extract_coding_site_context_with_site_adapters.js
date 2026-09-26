@@ -177,44 +177,7 @@ const ExercismAdapter = {
             throw new Error(submitted?.reason || "Could not submit Exercism solution.");
         }
 
-        // Submitting opens Exercism's "checking for automated feedback" modal,
-        // which holds the redirect until "Continue without waiting" is clicked.
-        // Once the editor footer is gone the redirect already happened.
-        const modalDeadline = performance.now() + 10000;
-
-        try {
-            while (performance.now() < modalDeadline) {
-                const modal = await executePage(tabId, () => {
-                    const button = [...document.querySelectorAll("button")]
-                        .find(candidate =>
-                            candidate.offsetWidth > 0 &&
-                            candidate.offsetHeight > 0 &&
-                            /continue without waiting/i.test(candidate.innerText || "")
-                        );
-
-                    if (!button) {
-                        return {
-                            dismissed: false,
-                            leftEditor: !document.querySelector(
-                                ".lhs-footer .submit-btn button"
-                            )
-                        };
-                    }
-
-                    button.click();
-                    return { dismissed: true, leftEditor: false };
-                });
-
-                if (!modal || modal.dismissed || modal.leftEditor) {
-                    break;
-                }
-
-                await sleep(250);
-            }
-        } catch (_) {
-            // The page may already have navigated; nothing left to dismiss.
-        }
-
+        return true;
     },
 
     async getContext(tabId) {
@@ -801,14 +764,15 @@ async function completeExercismExercise(tabId) {
                     ).status || "";
                 } catch (_) {}
 
-                const solved = [...document.querySelectorAll("h1, h2, h3, h4")]
-                    .some(heading =>
-                        heading.offsetWidth > 0 &&
-                        heading.offsetHeight > 0 &&
-                        /^exercise solved$/i.test(
-                            (heading.innerText || heading.textContent || "").trim()
-                        )
-                    );
+                const completionResultVisible = [
+                    ...document.querySelectorAll("dialog, [role='dialog']")
+                ].some(dialog =>
+                    dialog.offsetWidth > 0 &&
+                    dialog.offsetHeight > 0 &&
+                    /you['’]ve completed\b/i.test(
+                        (dialog.innerText || dialog.textContent || "").trim()
+                    )
+                );
 
                 const button = [...document.querySelectorAll("button")]
                     .find(candidate =>
@@ -820,7 +784,7 @@ async function completeExercismExercise(tabId) {
                         )
                     );
 
-                if (status === "completed" || (solved && !button)) {
+                if (status === "completed" || completionResultVisible) {
                     return "completed";
                 }
 

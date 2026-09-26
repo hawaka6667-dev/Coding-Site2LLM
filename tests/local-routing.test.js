@@ -178,14 +178,35 @@ test("stops restoring concepts scroll on exercise pages and resumes on return", 
     assert.deepEqual(scrollCalls, [4200]);
 });
 
-function loadWorker({ tabs = [] } = {}) {
+function loadWorker({ tabs = [], autoMarkComplete = true } = {}) {
     const messageListeners = [];
+    const createdTabs = [];
+    const createdWindows = [];
+    const removedTabs = [];
     const chrome = {
         action: { onClicked: { addListener: () => {} } },
         commands: { onCommand: { addListener: () => {} } },
         runtime: { onMessage: { addListener: listener => messageListeners.push(listener) } },
         scripting: { executeScript: async () => [{ result: true }] },
-        tabs: { query: async () => tabs, update: async () => {} }
+        storage: {
+            local: { get: async () => ({ exercismAutoMarkComplete: autoMarkComplete }) }
+        },
+        tabs: {
+            query: async () => tabs,
+            get: async tabId => tabs.find(tab => tab.id === tabId),
+            create: async properties => {
+                createdTabs.push(properties);
+                return { id: createdTabs.length + 10, ...properties };
+            },
+            remove: async tabId => removedTabs.push(tabId),
+            update: async () => {}
+        },
+        windows: {
+            create: async properties => {
+                createdWindows.push(properties);
+                return { id: createdWindows.length + 20, ...properties };
+            }
+        }
     };
     const context = vm.createContext({ chrome, console, performance, setTimeout, URL });
     context.importScripts = (...files) => {
@@ -202,6 +223,9 @@ function loadWorker({ tabs = [] } = {}) {
         context
     );
     context.messageListeners = messageListeners;
+    context.createdTabs = createdTabs;
+    context.createdWindows = createdWindows;
+    context.removedTabs = removedTabs;
     return context;
 }
 
@@ -218,6 +242,150 @@ test("routes supported exercise pages to their adapters", () => {
         leetcode: "LeetCode",
         codewars: "Codewars"
     }));
+});
+
+test("opens the same submitted Exercism overview in an unfocused window only when enabled", async () => {
+    const editorTab = {
+        id: 7,
+        windowId: 3,
+        url: "https://exercism.org/tracks/go/exercises/lasagna/edit"
+    };
+    const context = loadWorker({ tabs: [editorTab] });
+    const pageListeners = new Map();
+    const replacements = [];
+    const backToExerciseLink = {
+        innerText: "Back to Exercise",
+        href: "https://exercism.org/tracks/go/exercises/lasagna?via=back-link",
+        offsetWidth: 100,
+        offsetHeight: 20,
+        getAttribute: () => null
+    };
+    const pageContext = vm.createContext({
+        URL,
+        Date,
+        document: {
+            addEventListener: (type, listener) => {
+                const listeners = pageListeners.get(type) || [];
+                listeners.push(listener);
+                pageListeners.set(type, listeners);
+            },
+            querySelectorAll: () => [backToExerciseLink]
+        },
+        location: {
+            href: editorTab.url,
+            replace: url => replacements.push(url)
+        },
+        chrome: {
+            runtime: {
+                sendMessage: message => {
+                    for (const listener of context.messageListeners) {
+                        listener(message, { tab: editorTab }, () => {});
+                    }
+                }
+            }
+        }
+    });
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(
+                ROOT_DIR,
+                "worker",
+                "exercism",
+                "edit",
+                "return_to_editor_after_submit_redirect.js"
+            ),
+            "utf8"
+        ),
+        pageContext
+    );
+    const clickListeners = pageListeners.get("click");
+    const beforeVisitListeners = pageListeners.get("turbo:before-visit");
+    const submitButton = { disabled: false };
+    clickListeners[0]({
+        target: {
+            closest: selector => selector === ".lhs-footer .submit-btn button"
+                ? submitButton
+                : null
+        }
+    });
+    const overviewVisit = {
+        detail: { url: "https://exercism.org/tracks/go/exercises/lasagna" },
+        prevented: false,
+        preventDefault() {
+            this.prevented = true;
+        }
+    };
+    beforeVisitListeners[0](overviewVisit);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(overviewVisit.prevented, true);
+    assert.deepEqual(replacements, [editorTab.url]);
+    assert.equal(JSON.stringify(context.createdWindows), JSON.stringify([{
+        url: "https://exercism.org/tracks/go/exercises/lasagna?via=back-link",
+        focused: false
+    }]));
+    assert.equal(context.createdTabs.length, 0);
+
+    const disabledContext = loadWorker({
+        tabs: [editorTab],
+        autoMarkComplete: false
+    });
+    disabledContext.messageListeners[0](
+        {
+            type: "exercism-open-submitted-overview",
+            overviewUrl: "https://exercism.org/tracks/go/exercises/lasagna"
+        },
+        { tab: editorTab },
+        () => {}
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(disabledContext.createdWindows.length, 0);
+
+    const invalidTargetContext = loadWorker({ tabs: [editorTab] });
+    invalidTargetContext.messageListeners[0](
+        {
+            type: "exercism-open-submitted-overview",
+            overviewUrl: "https://evil.example/tracks/go/exercises/lasagna"
+        },
+        { tab: editorTab },
+        () => {}
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(invalidTargetContext.createdWindows.length, 0);
+});
+
+test("returns after triggering the Exercism Submit action without relying on modal copy", async () => {
+    async function triggerSubmit() {
+        let submitted = false;
+        let timestamp = 0;
+        const submitButton = {
+            offsetWidth: 100,
+            offsetHeight: 24,
+            disabled: false,
+            click: () => { submitted = true; }
+        };
+        const context = loadWorker();
+        context.document = {
+            querySelector: selector => selector === ".lhs-footer .run-tests-btn button"
+                ? { offsetWidth: 100, offsetHeight: 24, disabled: true }
+                : submitButton,
+            querySelectorAll: selector => selector === '[role="status"]' ? [] : []
+        };
+        context.performance = { now: () => (timestamp += 1000) };
+        vm.runInContext(
+            "executePage = async (_tabId, pageFunction, args = []) => pageFunction(...args); sleep = async () => {}",
+            context
+        );
+
+        const result = await vm.runInContext(
+            "ExercismAdapter.testAndSubmit(7, { skipRun: true })",
+            context
+        );
+
+        return { result, submitted };
+    }
+
+    assert.deepEqual(await triggerSubmit(), { result: true, submitted: true });
 });
 
 test("falls back to raw source for unrelated HTTP pages and rejects view-source pages", () => {
@@ -593,12 +761,19 @@ test("remembers a redirect so one exercise cannot loop in a tab session", () => 
     );
 });
 
-test("closes Exercism mark-complete state and refreshes only its track concepts", async () => {
+test("completes the Exercism overview condition-to-modal-to-result flow", async () => {
     const worker = loadWorker();
     let status = "iterated";
+    let markCompleteAvailable = false;
+    let confirmationModalVisible = false;
+    let completionResultVisible = false;
     let markClicks = 0;
     let confirmClicks = 0;
+    let overviewMutationCallback;
+    const messages = [];
+    const events = [];
     const reloadedTabIds = [];
+    const removedTabIds = worker.removedTabs;
     const markButton = {
         innerText: "Mark as complete",
         offsetWidth: 100,
@@ -606,6 +781,9 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
         disabled: false,
         click: () => {
             markClicks += 1;
+            events.push("mark-clicked");
+            confirmationModalVisible = true;
+            events.push("confirmation-modal-opened");
         }
     };
     const confirmButton = {
@@ -615,7 +793,12 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
         disabled: false,
         click: () => {
             confirmClicks += 1;
-            status = "completed";
+            events.push("confirm-clicked");
+            confirmationModalVisible = false;
+            setTimeout(() => {
+                completionResultVisible = true;
+                events.push("completion-result-output");
+            }, 250);
         }
     };
     worker.document = {
@@ -632,8 +815,17 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
             }
 
             if (selector === "button") {
-                return status === "iterated"
-                    ? [markButton, confirmButton]
+                if (confirmationModalVisible) return [confirmButton];
+                return markCompleteAvailable ? [markButton] : [];
+            }
+
+            if (selector === "dialog, [role='dialog']") {
+                return completionResultVisible
+                    ? [{
+                        innerText: "You've completed Hello World",
+                        offsetWidth: 600,
+                        offsetHeight: 400
+                    }]
                     : [];
             }
 
@@ -647,19 +839,26 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
         result: await func(...args)
     }];
     worker.chrome.tabs.query = async () => [
-        { id: 1, url: "https://exercism.org/tracks/go/concepts" },
+        { id: 1, url: "https://exercism.org/tracks/sqlite/concepts" },
         { id: 2, url: "https://exercism.org/tracks/rust/concepts" },
-        { id: 3, url: "https://exercism.org/tracks/go/concepts/?view=all" }
+        { id: 3, url: "https://exercism.org/tracks/sqlite/concepts/?view=all" }
     ];
     worker.chrome.tabs.reload = async tabId => {
         reloadedTabIds.push(tabId);
+        events.push(completionResultVisible
+            ? `concepts-reloaded-after-result-${tabId}`
+            : `concepts-reloaded-before-result-${tabId}`);
+    };
+    worker.chrome.tabs.remove = async tabId => {
+        removedTabIds.push(tabId);
+        events.push(`overview-closed-${tabId}`);
     };
 
     const documentListeners = new Map();
     const pageDocument = {
         documentElement: {},
         addEventListener: (type, listener) => documentListeners.set(type, listener),
-        querySelectorAll: selector => selector === "button"
+        querySelectorAll: selector => selector === "button" && markCompleteAvailable
             ? [markButton]
             : []
     };
@@ -668,11 +867,12 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
             storage: { local: { get: async () => ({}) } },
             runtime: {
                 sendMessage: message => {
+                    messages.push(message);
                     for (const listener of worker.messageListeners) {
                         listener(message, {
                             tab: {
                                 id: 10,
-                                url: "https://exercism.org/tracks/go/exercises/gross-store"
+                                url: "https://exercism.org/tracks/sqlite/exercises/hello-world"
                             }
                         }, () => {});
                     }
@@ -681,9 +881,14 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
         },
         document: pageDocument,
         location: {
-            href: "https://exercism.org/tracks/go/exercises/gross-store"
+            href: "https://exercism.org/tracks/sqlite/exercises/hello-world"
         },
-        MutationObserver: class { observe() {} }
+        MutationObserver: class {
+            constructor(callback) {
+                overviewMutationCallback = callback;
+            }
+            observe() {}
+        }
     });
     vm.runInContext(
         fs.readFileSync(
@@ -693,15 +898,37 @@ test("closes Exercism mark-complete state and refreshes only its track concepts"
         pageContext
     );
 
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(messages, []);
+
+    markCompleteAvailable = true;
+    overviewMutationCallback();
+
     const deadline = Date.now() + 1000;
-    while (reloadedTabIds.length === 0 && Date.now() < deadline) {
+    while (removedTabIds.length < 1 && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    assert.equal(status, "completed");
+    assert.equal(status, "iterated");
+    assert.equal(completionResultVisible, true);
     assert.equal(markClicks, 1);
     assert.equal(confirmClicks, 1);
+    assert.deepEqual(
+        messages.map(message => message.type),
+        ["exercism-mark-complete"]
+    );
     assert.deepEqual(reloadedTabIds, [1, 3]);
+    assert.deepEqual(removedTabIds, [10]);
+    assert.ok(
+        events.indexOf("completion-result-output") <
+            events.indexOf("concepts-reloaded-after-result-1"),
+        "the completion result must be visible before concepts refresh"
+    );
+    assert.ok(
+        events.indexOf("concepts-reloaded-after-result-3") <
+            events.indexOf("overview-closed-10"),
+        "the overview must close after the concepts refresh"
+    );
 });
 
 test("restores and saves the Exercism concepts page scroll position", () => {

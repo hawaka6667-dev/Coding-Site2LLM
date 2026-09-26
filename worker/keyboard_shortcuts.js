@@ -78,7 +78,14 @@ function triggerShortcut(event, command, binding) {
     event.preventDefault();
     event.stopPropagation();
     try {
-        chrome.runtime.sendMessage({ type: "keyboard-shortcut", command });
+        const message = { type: "keyboard-shortcut", command };
+        const selectedText = command === "send-context"
+            ? window.getSelection()?.toString() || ""
+            : "";
+        if (selectedText.trim()) {
+            message.selectedText = selectedText;
+        }
+        chrome.runtime.sendMessage(message);
     } catch (_) {
         shortcutHeld = false;
         heldShortcut = "";

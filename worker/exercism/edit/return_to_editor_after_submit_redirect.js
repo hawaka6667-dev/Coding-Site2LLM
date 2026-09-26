@@ -10,6 +10,7 @@ const EXERCISM_EDIT_PATH_PATTERN =
     /^\/tracks\/([^/]+)\/exercises\/([^/]+)\/edit\/?$/;
 
 let submitRedirectReturnTarget = "";
+let submitRedirectOverviewTarget = "";
 let submitRedirectStartedAt = 0;
 
 const SUBMIT_REDIRECT_MAX_AGE_MS = 120000;
@@ -43,26 +44,62 @@ function isOverviewForEditor(overviewUrl, editorUrl) {
     }
 }
 
+function getBackToExerciseUrl() {
+    const link = [...document.querySelectorAll("a[href], [role='link'][href]")]
+        .find(candidate =>
+            candidate.offsetWidth > 0 &&
+            candidate.offsetHeight > 0 &&
+            /back to exercise/i.test(
+                `${candidate.innerText || ""} ${candidate.getAttribute("aria-label") || ""}`
+            )
+        );
+
+    return link?.href || "";
+}
+
 function consumeSubmitRedirectTarget(overviewUrl) {
     const editorUrl = submitRedirectReturnTarget;
+    const backToExerciseUrl = submitRedirectOverviewTarget;
 
     if (!editorUrl) {
-        return "";
+        return null;
     }
 
     if (Date.now() - submitRedirectStartedAt > SUBMIT_REDIRECT_MAX_AGE_MS) {
         submitRedirectReturnTarget = "";
+        submitRedirectOverviewTarget = "";
         submitRedirectStartedAt = 0;
-        return "";
+        return null;
     }
 
-    if (!isOverviewForEditor(overviewUrl, editorUrl)) {
-        return "";
+    if (
+        !isOverviewForEditor(overviewUrl, editorUrl) ||
+        !isOverviewForEditor(backToExerciseUrl, editorUrl)
+    ) {
+        return null;
     }
 
     submitRedirectReturnTarget = "";
+    submitRedirectOverviewTarget = "";
     submitRedirectStartedAt = 0;
-    return editorUrl;
+    return { editorUrl, overviewUrl: backToExerciseUrl };
+}
+
+function openSubmittedOverviewAndKeepEditor(target) {
+    const sendMessage = globalThis.chrome?.runtime?.sendMessage;
+
+    if (typeof sendMessage === "function") {
+        try {
+            sendMessage.call(globalThis.chrome.runtime, {
+                type: "exercism-open-submitted-overview",
+                overviewUrl: target.overviewUrl
+            });
+        } catch (_) {
+            // The extension context may disappear while the page remains open.
+        }
+    }
+
+    location.replace(target.editorUrl);
 }
 
 document.addEventListener("click", event => {
@@ -75,18 +112,19 @@ document.addEventListener("click", event => {
     }
 
     submitRedirectReturnTarget = getExercismEditorUrl(location.href);
+    submitRedirectOverviewTarget = getBackToExerciseUrl();
     submitRedirectStartedAt = Date.now();
 }, true);
 
 document.addEventListener("turbo:before-visit", event => {
-    const editorUrl = consumeSubmitRedirectTarget(event.detail?.url);
+    const target = consumeSubmitRedirectTarget(event.detail?.url);
 
-    if (!editorUrl) {
+    if (!target) {
         return;
     }
 
     event.preventDefault();
-    location.replace(editorUrl);
+    openSubmittedOverviewAndKeepEditor(target);
 }, true);
 
 document.addEventListener("turbo:load", () => {
@@ -94,13 +132,14 @@ document.addEventListener("turbo:load", () => {
         return;
     }
 
-    const editorUrl = consumeSubmitRedirectTarget(location.href);
+    const target = consumeSubmitRedirectTarget(location.href);
 
-    if (editorUrl) {
-        location.replace(editorUrl);
+    if (target) {
+        openSubmittedOverviewAndKeepEditor(target);
         return;
     }
 
     submitRedirectReturnTarget = "";
+    submitRedirectOverviewTarget = "";
     submitRedirectStartedAt = 0;
 }, true);
