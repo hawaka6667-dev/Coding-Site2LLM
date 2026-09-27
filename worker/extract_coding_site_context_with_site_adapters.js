@@ -391,7 +391,7 @@ const LeetCodeAdapter = {
     },
 
     async getContext(tabId) {
-        const value = await executePage(tabId, () => {
+        const value = await executePage(tabId, async () => {
             const textWithoutMedia = element => {
                 if (!element) {
                     return "";
@@ -414,7 +414,39 @@ const LeetCodeAdapter = {
                 textWithoutMedia(document.querySelector('[data-track-load="description_content"]')) ||
                 textWithoutMedia(document.querySelector('div[class*="description__"]')) ||
                 "";
-            const description = visibleDescription
+            let descriptionSource = visibleDescription;
+
+            if (!descriptionSource) {
+                const problemSlug = location.pathname.match(
+                    /^\/problems\/([^/]+)/
+                )?.[1];
+
+                if (problemSlug) {
+                    try {
+                        const response = await fetch(
+                            `/problems/${encodeURIComponent(problemSlug)}/description/`,
+                            { credentials: "include" }
+                        );
+
+                        if (response.ok) {
+                            const html = await response.text();
+                            const parsed = new DOMParser().parseFromString(
+                                html,
+                                "text/html"
+                            );
+                            const descriptionElement = parsed.querySelector(
+                                '[data-track-load="description_content"]'
+                            ) || parsed.querySelector('div[class*="description__"]');
+                            descriptionSource = descriptionElement?.innerText?.trim() ||
+                                descriptionElement?.textContent?.trim() ||
+                                "";
+                        }
+                    } catch (_) {
+                    }
+                }
+            }
+
+            const description = descriptionSource
                 .replace(/Can\s+you\s+solve\s+this\s+real\s+interview\s+question\?\s*/i, "")
                 .replace(/(?:^|\n)\s*Beats\s+\d+(?:\.\d+)?%[^\n]*(?:\n|$)/gi, "\n")
                 .replace(/\s+/g, " ")
@@ -437,12 +469,45 @@ const LeetCodeAdapter = {
                 .map(line => line.replace(/\s+Beats\b.*$/i, "").trim())
                 .filter(line => line && !/^Beats\b/i.test(line))
                 .join("\n");
+            const submissionFeedback = [...document.querySelectorAll(".flexlayout__tab")]
+                .map(panel => {
+                    const bounds = panel.getBoundingClientRect();
+                    const heading = panel.querySelector("h3");
+                    return {
+                        panel,
+                        heading: heading?.innerText?.trim() || "",
+                        visible: bounds.width > 0 && bounds.height > 0
+                    };
+                })
+                .filter(candidate =>
+                    candidate.visible &&
+                    candidate.heading &&
+                    feedbackKeywords.some(keyword =>
+                        candidate.heading.includes(keyword)
+                    )
+                )
+                .map(candidate => {
+                    const panelText = candidate.panel.innerText || "";
+                    const inputStart = panelText.indexOf("Last Executed Input");
+                    const input = inputStart < 0
+                        ? ""
+                        : panelText.slice(inputStart)
+                            .split(/\r?\n/)
+                            .filter(line => !/^(?:Use Testcase|View more)$/i.test(line.trim()))
+                            .join("\n")
+                            .trim();
+                    return [candidate.heading, input]
+                        .filter(Boolean)
+                        .join("\n\n")
+                        .slice(0, 12000);
+                })
+                .sort((left, right) => right.length - left.length)[0] || "";
             const feedbackCandidates = [
                 ...document.querySelectorAll(
                     '[data-e2e-locator], [class*="result"], [class*="console"]'
                 )
             ];
-            const feedback = feedbackCandidates
+            const pageFeedback = feedbackCandidates
                 .map(element => ({
                     text: cleanFeedback(textWithoutMedia(element)),
                     visible: element.offsetWidth > 0 && element.offsetHeight > 0
@@ -454,6 +519,7 @@ const LeetCodeAdapter = {
                     feedbackKeywords.some(keyword => candidate.text.includes(keyword))
                 )
                 .sort((left, right) => right.text.length - left.text.length)[0]?.text || "";
+            const feedback = submissionFeedback || pageFeedback;
 
             if (window.monaco && window.monaco.editor) {
                 const monaco = window.monaco.editor;

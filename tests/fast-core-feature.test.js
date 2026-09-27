@@ -656,6 +656,89 @@ test("extracts LeetCode source from the focused Monaco editor", async () => {
     assert.doesNotMatch(result.source, /kidsWithCandies/);
 });
 
+test("extracts LeetCode submission description, verdict, failing input, and code", async () => {
+    const context = loadWorker();
+    const source = "int findKthLargest(int* nums, int numsSize, int k) { return 0; }";
+    const description = "Given an integer array nums and an integer k, return the kth largest element.";
+    const feedbackPanel = {
+        innerText: "All Submissions\nTime Limit Exceeded\n44 / 47 testcases passed\nsubmitted at Sep 27, 2026 21:15\nLast Executed Input\nUse Testcase\nnums = [1,2,3,4,5]\nk = 2\nView more",
+        getBoundingClientRect: () => ({ width: 500, height: 300 }),
+        querySelector: selector => selector === "h3"
+            ? { innerText: "Time Limit Exceeded\n44 / 47 testcases passed" }
+            : null
+    };
+    const editorNode = {
+        isConnected: true,
+        offsetWidth: 800,
+        offsetHeight: 500,
+        getBoundingClientRect: () => ({ width: 800, height: 500 })
+    };
+    const descriptionElement = {
+        innerText: description,
+        textContent: description,
+        cloneNode: () => ({
+            innerText: description,
+            querySelectorAll: () => []
+        })
+    };
+    let requestedUrl = "";
+    let requestedCredentials = "";
+
+    context.location = {
+        href: "https://leetcode.com/problems/kth-largest-element-in-an-array/submissions/123/",
+        origin: "https://leetcode.com",
+        pathname: "/problems/kth-largest-element-in-an-array/submissions/123/"
+    };
+    context.document = {
+        title: "Kth Largest Element in an Array - LeetCode",
+        activeElement: null,
+        querySelector: () => null,
+        querySelectorAll(selector) {
+            if (selector === ".flexlayout__tab") return [feedbackPanel];
+            return [];
+        }
+    };
+    context.fetch = async (url, options) => {
+        requestedUrl = url;
+        requestedCredentials = options.credentials;
+        return { ok: true, text: async () => "<html>question page</html>" };
+    };
+    context.DOMParser = class {
+        parseFromString() {
+            return { querySelector: () => descriptionElement };
+        }
+    };
+    context.window = {
+        monaco: {
+            editor: {
+                getEditors: () => [{
+                    getDomNode: () => editorNode,
+                    getModel: () => ({ getValue: () => source })
+                }]
+            }
+        }
+    };
+    context.chrome.scripting.executeScript = async ({ func }) => [{
+        result: await func()
+    }];
+
+    const result = await vm.runInContext(
+        "LeetCodeAdapter.getContext(1)",
+        context
+    );
+
+    assert.equal(requestedUrl, "/problems/kth-largest-element-in-an-array/description/");
+    assert.equal(requestedCredentials, "include");
+    assert.equal(result.title, "Kth Largest Element in an Array - LeetCode");
+    assert.equal(result.description, description);
+    assert.match(result.feedback, /Time Limit Exceeded/);
+    assert.match(result.feedback, /44 \/ 47 testcases passed/);
+    assert.match(result.feedback, /nums = \[1,2,3,4,5\]/);
+    assert.match(result.feedback, /k = 2/);
+    assert.doesNotMatch(result.feedback, /Use Testcase|View more|All Submissions/);
+    assert.equal(result.source, source);
+});
+
 test("sends selected text instead of page context and keeps full context as the default", async () => {
     const context = loadWorker();
     context.tabState.push({

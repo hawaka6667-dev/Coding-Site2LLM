@@ -68,7 +68,7 @@ MCP 是 debugging probe，不是 production dependency。先观察 live runtime�
 
 检查页面切换时，先区分整页 hard navigation 与 SPA/Turbo client-side navigation。后者可在不重建 document、不重新注入 content script 的情况下改变 URL、题目内容和 editor DOM；不能仅凭 tab id 不变或 URL 改变，就假设脚本、页面状态或编辑器已刷新。
 
-跨页面维护路由按题目身份而非完整 URL 判断：同 URL 刷新以及同题的 SPA/Turbo 路由变化都保留维护；身份变化才删除整条路由和旧复制 payload。LeetCode 同一 problem slug 的根页、query/hash 和 `/submissions/...` 属于同题；submission 页面上下文使用 LeetCode adapter 提取，但不是可编辑目标，Smart Return 必须选择同题根页 editor；Exercism overview 与 `/edit` 使用同一 track/exercise 身份；Codewars 使用 kata 与训练语言身份。其它 HTTP(S) 来源按完整 URL 区分。Chromium 的 History API 客户端导航使用 `webNavigation.onHistoryStateUpdated` 探测，并限制在主 frame；该 API 需要 manifest 的 `webNavigation` permission。
+跨页面维护路由按题目身份而非完整 URL 判断：同 URL 刷新以及同题的 SPA/Turbo 路由变化都保留维护；身份变化才删除整条路由和旧复制 payload。LeetCode 同一 problem slug 的根页、query/hash 和 `/submissions/...` 属于同题；submission 页面上下文使用 LeetCode adapter 提取，描述面板未挂载时从同源 `/description/` 文档读取题面，并从可见 submission detail 提取 verdict 与 `Last Executed Input`；submission 页面不是可编辑目标，Smart Return 必须选择同题根页 editor。Exercism overview 与 `/edit` 使用同一 track/exercise 身份；Codewars 使用 kata 与训练语言身份。其它 HTTP(S) 来源按完整 URL 区分。Chromium 的 History API 客户端导航使用 `webNavigation.onHistoryStateUpdated` 探测，并限制在主 frame；该 API 需要 manifest 的 `webNavigation` permission。
 
 推荐探测顺序：
 

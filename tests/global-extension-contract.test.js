@@ -251,7 +251,11 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
 
 test("continues past Exercism's automated-feedback check without waiting", () => {
     const clicked = [];
-    const dialog = { tagName: "DIALOG", getAttribute: () => null };
+    const dialog = {
+        tagName: "DIALOG",
+        getAttribute: () => null,
+        getBoundingClientRect: () => ({ width: 400, height: 200 })
+    };
     const makeButton = label => ({
         innerText: label,
         parentElement: dialog,
@@ -264,9 +268,10 @@ test("continues past Exercism's automated-feedback check without waiting", () =>
         makeButton("Continue without waiting"),
         makeButton("Not now")
     ];
+    dialog.querySelectorAll = () => buttons;
     const document = {
         documentElement: {},
-        querySelectorAll: () => buttons,
+        querySelectorAll: () => [dialog],
         addEventListener: () => {}
     };
     const context = vm.createContext({
