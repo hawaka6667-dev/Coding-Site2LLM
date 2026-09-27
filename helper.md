@@ -35,6 +35,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | Exercism overview redirect and completion confirmation | `worker/exercism/overview/open_exercise_in_editor.js`, `worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism editor bridge and submission | `worker/exercism/edit/content.js`, `worker/extract_coding_site_context_with_site_adapters.js`, `worker/run_coding_context_to_llm_workflow.js`, `worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:routing` |
+| Codewars Smart Return write-back and full-suite attempt | `worker/extract_coding_site_context_with_site_adapters.js`, `worker/run_coding_context_to_llm_workflow.js` | `npm run test:unit` |
 | Exercism Continue dialogs | `worker/exercism/edit/continue_after_exercism_modals.js`, `tests/fast-core-feature.test.js` | `npm run test:unit` |
 | popup daily-practice entry | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
 | extension injection 和 manifest | `manifest.json`, `worker/` | `npm run test:contracts` |
@@ -64,6 +65,10 @@ Documentation-only changes, tests, and bug fixes do not increment the version. B
 ### 浏览器探测原则
 
 MCP 是 debugging probe，不是 production dependency。先观察 live runtime，再修改 adapter 或 page script。
+
+检查页面切换时，先区分整页 hard navigation 与 SPA/Turbo client-side navigation。后者可在不重建 document、不重新注入 content script 的情况下改变 URL、题目内容和 editor DOM；不能仅凭 tab id 不变或 URL 改变，就假设脚本、页面状态或编辑器已刷新。
+
+跨页面维护路由按题目身份而非完整 URL 判断：同 URL 刷新以及同题的 SPA/Turbo 路由变化都保留维护；身份变化才删除整条路由和旧复制 payload。LeetCode 同一 problem slug 的根页、query/hash 和 `/submissions/...` 属于同题；submission 页面上下文使用 LeetCode adapter 提取，但不是可编辑目标，Smart Return 必须选择同题根页 editor；Exercism overview 与 `/edit` 使用同一 track/exercise 身份；Codewars 使用 kata 与训练语言身份。其它 HTTP(S) 来源按完整 URL 区分。Chromium 的 History API 客户端导航使用 `webNavigation.onHistoryStateUpdated` 探测，并限制在主 frame；该 API 需要 manifest 的 `webNavigation` permission。
 
 推荐探测顺序：
 
@@ -118,6 +123,19 @@ coding page
 
 LLM 页不主动分析题目。扩展只负责传输已有页面上下文。
 
+### 页面导航与 editor lifecycle
+
+同一标签页的页面切换不一定是整页加载：
+
+| 导航类型 | 页面行为 | 扩展侧约束 |
+| --- | --- | --- |
+| hard navigation | document 被替换；匹配的 content script 按 manifest 重新注入 | 依赖新 document 初始化的逻辑放在正常注入入口 |
+| SPA/Turbo navigation | History API 或站点 router/Turbo 更新 URL、内容或局部 DOM；document 和已注入脚本继续存在 | 不等待重新注入；长生命周期逻辑监听站点路由事件及所需 DOM/state 变化 |
+
+切题、返回题目或其它同页路由切换后，必须在动作发生时重新读取当前 URL、可见 editor 和它绑定的 model；不能复用页面初次加载时缓存的 editor/model。若 editor 正在卸载或重建，adapter 可有界等待当前可见实例就绪；editor 列表暂时为空时，不得把残留的全局旧 model 当成当前 editor 写入。
+
+Exercism 的 `Back to Exercise` 是具体的 Turbo 导航例子：`return_to_editor_after_submit_redirect.js` 通过 `turbo:before-visit` / `turbo:load` 处理提交后的同页跳转；`open_exercise_in_editor.js` 也监听 Turbo 生命周期及 DOM 变化。LeetCode 切题后的 Monaco 延迟挂载由 `tests/local-routing.test.js` 覆盖。新增或修改导航行为时，测试必须区分整页加载与客户端路由，并验证切换后使用的是当前页面/editor 状态。
+
 快捷键动作是两个独立的 action：
 
 ```text
@@ -135,6 +153,17 @@ smart-return  : LLM page -> source coding page
 
 LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当前 coding 页记录为该 LLM 页的当前返回页；来源页关闭后，返回动作会从该 LLM 页右侧选择第一个同平台的做题页。没有匹配页时不跳转，也不清除已记录的复制文本。
 
+返回路由是用户通过 `send-context`（默认 Alt+Q；popup 使用同一 workflow）明确建立的维护授权，按 `windowId + llmTabId` 关联到发送时的 source tab、URL 和题目身份。硬导航、History API 和 hash 导航都按站点身份比较；同题 URL 变化保留维护，身份变化删除整条路由和旧复制 payload。Smart Return 执行前再次比较当前 source 身份，阻止导航事件竞态把旧 payload 写入新题。
+
+| 站点 | 维护身份 | 编辑目标约束 |
+| --- | --- | --- |
+| LeetCode | `/problems/:slug` 的 slug；忽略 query、hash 与同题子路由 | 只匹配 `/problems/:slug` 根页；`/submissions/...` 可证明同题但不能作为 Monaco 回填目标 |
+| Exercism | track + exercise slug；overview 与 `/edit` 相同 | overview 与编辑页仍是不同页面能力，不能把 overview 当作代码编辑器 |
+| Codewars | kata slug + train language | 只能使用同一身份的训练页 |
+| 其它 HTTP(S) 来源 | 完整 URL | 不跨 URL 猜测题目身份 |
+
+同题 source tab 当前不是编辑目标时，Smart Return 只可选择身份相同的可编辑 tab；身份已知但没有匹配目标时不得退回到任意同平台页面。只有下一次显式 `send-context` 才能为新题建立维护。
+
 ### 可复用工作流生命周期
 
 发送、复制、回跳不是一次性的线性脚本，而是同一 LLM tab 上可反复执行的独立 cycle。任何跨页面 workflow 都必须显式定义 `idle -> captured -> consuming -> idle` 的状态转换，以及 success、failure、cancel 和无目标页各自的终态；不能只实现首次成功路径后留下 in-flight flag、缓存文本或页面状态给下一次调用复用。
@@ -147,7 +176,7 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 
 | 模块 | 只负责 | 不负责 |
 | --- | --- | --- |
-| `extract_coding_site_context_with_site_adapters.js` | adapter、页面提取、过滤、prompt 数据 | 跨页面导航策略 |
+| `extract_coding_site_context_with_site_adapters.js` | adapter、页面提取、过滤、prompt 数据、站点专属编辑器回写和测试提交 | 跨页面导航策略 |
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
 | `find_llm_tab_and_insert_prompt.js` | 找到指定 provider 并插入 prompt | 站点状态判断 |
 | `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由；已确认的 Exercism 提交可在自动完成开启时后台打开同题 overview | 站点专属 selector |
@@ -231,6 +260,8 @@ feedback
 ```
 
 只传输当前题目有用的信息。过滤 editorial、SEO/meta 文本、媒体、性能排名等噪声。
+
+Codewars Smart Return 必须通过 `#code .js-editor .CodeMirror` 的 CodeMirror 实例 `setValue()` 更新 solution model；不要写内部 textarea 或 `#fixture` 样例测试编辑器。完整测试提交使用 `#attempt_btn`，不要依赖合成 `Ctrl+Enter` 事件。
 
 ### Exercism 页面测试原则
 

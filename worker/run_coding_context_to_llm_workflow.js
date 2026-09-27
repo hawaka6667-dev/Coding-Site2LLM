@@ -7,6 +7,7 @@ contract: no website selectors or page-specific extraction
 let workflowPromise = null;
 let returnRoutes = null;
 let keyboardShortcutHeld = false;
+let keyboardShortcutHeldReleaseToken = "";
 let keyboardShortcutReleaseTimer = null;
 const exercismSubmitPromises = new Map();
 const RETURN_ROUTE_KEY = "codingSite2LlmReturnRoute";
@@ -25,10 +26,26 @@ async function saveReturnRoute(route) {
     const routes = await loadReturnRoutes();
     const key = getReturnRouteKey(route.windowId, route.llmTabId);
     routes[key] = route;
+    await persistReturnRoutes(routes);
+}
+
+async function persistReturnRoutes(routes) {
     returnRoutes = routes;
     const value = { [RETURN_ROUTES_KEY]: routes };
     await chrome.storage?.local?.set?.(value);
     await chrome.storage?.session?.set?.(value);
+}
+
+async function clearReturnRoute(routeKey) {
+    const routes = await loadReturnRoutes();
+
+    if (!Object.hasOwn(routes, routeKey)) {
+        return false;
+    }
+
+    delete routes[routeKey];
+    await persistReturnRoutes(routes);
+    return true;
 }
 
 async function loadReturnRoute() {
@@ -62,6 +79,10 @@ function normalizeReturnRoute(route) {
     return {
         ...route,
         sourcePlatform: sourcePlatform || "",
+        sourceIdentity: route.sourceIdentity || getCodingPageIdentity(
+            route.sourceUrl,
+            sourcePlatform || ""
+        ),
         status: route.status || (route.sourceTabId ? "routed" : "orphaned")
     };
 }
@@ -148,6 +169,14 @@ async function recordLlmCopy(tabId, text) {
 }
 
 async function replaceCode(tabId, text) {
+    const sourceTab = await chrome.tabs.get?.(tabId);
+    const platform = sourceTab?.url ? getPlatform(sourceTab.url) : null;
+
+    if (typeof platform?.replaceCode === "function") {
+        await platform.replaceCode(tabId, text);
+        return;
+    }
+
     const replaced = await executePage(tabId, value => {
         if (window.monaco?.editor) {
             const model = window.monaco.editor.getModels()[0];
@@ -240,11 +269,37 @@ async function returnToCodingPage(llmTab) {
 
     const tabs = await chrome.tabs.query({ windowId: llmTab.windowId });
     const sourceTab = tabs.find(tab => tab.id === route.sourceTabId);
+
+    if (sourceTab?.url && route.sourceUrl) {
+        const sourceIdentity = getCodingPageIdentity(
+            sourceTab.url,
+            route.sourcePlatform
+        );
+        const maintainedIdentity = route.sourceIdentity ||
+            getCodingPageIdentity(route.sourceUrl, route.sourcePlatform);
+
+        if (!sourceIdentity || sourceIdentity !== maintainedIdentity) {
+            await clearReturnRoute(routeKey);
+            return;
+        }
+    }
+
     const sourceIsValid = sourceTab &&
         isCodingTabForPlatform(sourceTab, route.sourcePlatform);
+    const targetPlatform = route.sourcePlatform === "Exercism overview"
+        ? "Exercism"
+        : route.sourcePlatform;
     const targetTab = sourceIsValid
         ? sourceTab
-        : findRightCodingTab(tabs, llmTab, route.sourcePlatform);
+        : findRightCodingTab(
+            tabs,
+            llmTab,
+            targetPlatform,
+            route.sourceIdentity || getCodingPageIdentity(
+                route.sourceUrl,
+                route.sourcePlatform
+            )
+        );
 
     if (!targetTab) {
         await saveReturnRoute({ ...route, sourceTabId: null, status: "orphaned" });
@@ -288,6 +343,13 @@ function isCodingTabForPlatform(tab, sourcePlatform) {
     }
 
     try {
+        if (
+            sourcePlatform === "LeetCode" &&
+            new URL(tab.url).pathname.includes("/submissions/")
+        ) {
+            return false;
+        }
+
         const platform = getPlatform(tab.url);
         return platform.name === sourcePlatform && platform.name !== "Exercism overview";
     } catch (_) {
@@ -295,11 +357,19 @@ function isCodingTabForPlatform(tab, sourcePlatform) {
     }
 }
 
-function findRightCodingTab(tabs, llmTab, sourcePlatform) {
-    return tabs
+function findRightCodingTab(tabs, llmTab, sourcePlatform, preferredIdentity = "") {
+    const candidates = tabs
         .filter(tab => typeof tab.index === "number" && tab.index > llmTab.index)
         .filter(tab => isCodingTabForPlatform(tab, sourcePlatform))
-        .sort((left, right) => left.index - right.index)[0] || null;
+        .sort((left, right) => left.index - right.index);
+
+    if (preferredIdentity) {
+        return candidates.find(tab =>
+            getCodingPageIdentity(tab.url, sourcePlatform) === preferredIdentity
+        ) || null;
+    }
+
+    return candidates[0] || null;
 }
 
 async function runWorkflow(selectedText = "") {
@@ -367,6 +437,10 @@ async function runWorkflowOnce(selectedText = "") {
         llmTabId: deepSeekTab.id,
         sourcePlatform: platform.name,
         sourceUrl: currentTab.url || "",
+        sourceIdentity: getCodingPageIdentity(
+            currentTab.url || "",
+            platform.name
+        ),
         status: "routed",
         copied: false,
         copiedText: ""
@@ -482,6 +556,62 @@ chrome.action.onClicked.addListener(async () => {
     }
 });
 
+function invalidateReturnRoutesForSourceUrlChange(tabId, url) {
+    if (!Number.isInteger(tabId) || typeof url !== "string") {
+        return;
+    }
+
+    loadReturnRoutes()
+        .then(async routes => {
+            let changed = false;
+
+            for (const [key, route] of Object.entries(routes)) {
+                if (route.sourceTabId !== tabId || route.sourceUrl === url) {
+                    continue;
+                }
+
+                const previousIdentity = route.sourceIdentity ||
+                    getCodingPageIdentity(route.sourceUrl, route.sourcePlatform);
+                const identityPlatform = route.sourcePlatform === "Exercism overview"
+                    ? "Exercism"
+                    : route.sourcePlatform;
+                const nextIdentity = getCodingPageIdentity(url, identityPlatform);
+
+                if (previousIdentity && previousIdentity === nextIdentity) {
+                    continue;
+                }
+
+                delete routes[key];
+                changed = true;
+            }
+
+            if (changed) {
+                await persistReturnRoutes(routes);
+            }
+        })
+        .catch(error => {
+            console.error("[workflow] return route invalidation ERROR:", error);
+        });
+}
+
+chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
+    if (typeof changeInfo.url === "string") {
+        invalidateReturnRoutesForSourceUrlChange(tabId, changeInfo.url);
+    }
+});
+
+chrome.webNavigation?.onHistoryStateUpdated?.addListener(details => {
+    if (details.frameId === 0) {
+        invalidateReturnRoutesForSourceUrlChange(details.tabId, details.url);
+    }
+});
+
+chrome.webNavigation?.onReferenceFragmentUpdated?.addListener(details => {
+    if (details.frameId === 0) {
+        invalidateReturnRoutesForSourceUrlChange(details.tabId, details.url);
+    }
+});
+
 chrome.tabs.onRemoved?.addListener((tabId, removeInfo) => {
     loadReturnRoutes()
         .then(async routes => {
@@ -584,7 +714,11 @@ async function markCompleteAndRefreshConcepts(tabId, exerciseUrl) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "keyboard-shortcut-release") {
+        if (message.releaseToken !== keyboardShortcutHeldReleaseToken) {
+            return;
+        }
         keyboardShortcutHeld = false;
+        keyboardShortcutHeldReleaseToken = "";
         if (keyboardShortcutReleaseTimer) {
             clearTimeout(keyboardShortcutReleaseTimer);
             keyboardShortcutReleaseTimer = null;
@@ -600,8 +734,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
         keyboardShortcutHeld = true;
+        keyboardShortcutHeldReleaseToken = message.releaseToken || "";
         keyboardShortcutReleaseTimer = setTimeout(() => {
             keyboardShortcutHeld = false;
+            keyboardShortcutHeldReleaseToken = "";
             keyboardShortcutReleaseTimer = null;
         }, KEYBOARD_SHORTCUT_LOCK_TIMEOUT_MS);
 

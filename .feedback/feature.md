@@ -12,14 +12,14 @@ reload
 做一下简单cleanup，主要是readability  ❌       review
 ---
 
-neet支持
-codewar  回填没删除 没submit   
+neet支持 ？？？
+codewar  回填没删除 没submit   ✔
 ctf
 
 
 选中或者提交胜利以后     
 
-静默mark as complete✔
+静默mark as complete✔➖
 兜底源码是文字 html冲突✔➖
 png
 
@@ -42,13 +42,9 @@ discord管理
       跟随+
 
       兜底但不包含html内容✔
-
-网站包
-
-
 ///////////////////////////////////////////////////////////////////
 
-terminology
+ctrl← ctrl→
 
 
 User Panel
@@ -62,7 +58,23 @@ list pages弹一条通知             ？？？？？
 ←自己点击确认调试
 
 
-/网站
+/网站包
 加neet、Codingame、牛客网。。。CTF，HackerRank, AtCoder, NeetCode。。。。。。。。
 
+推荐学习方案
+neetcode75
+leetcode c
+codewar nasm
+
+
 algo run
+
+
+范围	文件数	总行数	非空行
+扩展运行时代码	25	4,370	3,766
+测试	7	2,646	2,387
+.build 辅助脚本	2	170	149
+.feedback 历史材料	2	344	303
+图标预览页	1	144	128
+所有源码类文件	37	7,674	6,733
+

@@ -15,12 +15,24 @@ const ROOT_DIR = path.join(__dirname, "..");
 function loadWorker() {
     const tabState = [];
     const messageListeners = [];
+    const tabUpdatedListeners = [];
+    const historyStateUpdatedListeners = [];
+    const referenceFragmentUpdatedListeners = [];
     const chrome = {
         action: { onClicked: { addListener: () => {} } },
         commands: { onCommand: { addListener: () => {} } },
         runtime: { onMessage: { addListener: listener => messageListeners.push(listener) } },
         scripting: { executeScript: async () => [{ result: true }] },
+        webNavigation: {
+            onHistoryStateUpdated: {
+                addListener: listener => historyStateUpdatedListeners.push(listener)
+            },
+            onReferenceFragmentUpdated: {
+                addListener: listener => referenceFragmentUpdatedListeners.push(listener)
+            }
+        },
         tabs: {
+            onUpdated: { addListener: listener => tabUpdatedListeners.push(listener) },
             query: async details => details?.windowId
                 ? tabState.filter(tab => tab.windowId === details.windowId)
                 : tabState,
@@ -31,6 +43,7 @@ function loadWorker() {
     const context = vm.createContext({
         chrome,
         console,
+        URL,
         performance,
         setTimeout,
         clearTimeout
@@ -44,6 +57,9 @@ function loadWorker() {
     };
     context.tabState = tabState;
     context.messageListeners = messageListeners;
+    context.tabUpdatedListeners = tabUpdatedListeners;
+    context.historyStateUpdatedListeners = historyStateUpdatedListeners;
+    context.referenceFragmentUpdatedListeners = referenceFragmentUpdatedListeners;
 
     vm.runInContext(
         fs.readFileSync(path.join(ROOT_DIR, "background.js"), "utf8"),
@@ -52,8 +68,284 @@ function loadWorker() {
     return context;
 }
 
+test("keeps LeetCode maintenance across same-problem routes and clears it on a new problem", async () => {
+    const context = loadWorker();
+    const route = {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "LeetCode",
+        sourceUrl: "https://leetcode.com/problems/two-sum/",
+        copied: true,
+        copiedText: "old problem answer"
+    };
+    context.route = route;
+    vm.runInContext("returnRoutes = { '1:20': route }", context);
+
+    context.tabUpdatedListeners[0](10, {
+        status: "loading",
+        url: route.sourceUrl
+    }, {
+        id: 10,
+        windowId: 1,
+        url: route.sourceUrl
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
+
+    context.historyStateUpdatedListeners[0]({
+        tabId: 10,
+        frameId: 0,
+        url: "https://leetcode.com/problems/two-sum/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75"
+    }, {
+        id: 10,
+        windowId: 1,
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
+
+    context.tabUpdatedListeners[0](10, {
+        url: "https://leetcode.com/problems/maximum-subarray/"
+    }, {
+        id: 10,
+        windowId: 1,
+        url: "https://leetcode.com/problems/maximum-subarray/"
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), undefined);
+
+    const tabUpdates = [];
+    context.chrome.tabs.update = async (...args) => tabUpdates.push(args);
+    await vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context);
+    assert.equal(tabUpdates.length, 0);
+
+    await vm.runInContext(`saveReturnRoute({
+        ...route,
+        sourceUrl: "https://leetcode.com/problems/maximum-subarray/"
+    })`, context);
+
+    assert.equal(
+        vm.runInContext("returnRoutes['1:20'].sourceUrl", context),
+        "https://leetcode.com/problems/maximum-subarray/"
+    );
+});
+
+test("clears maintained return routes when History API navigation changes the exercise", async () => {
+    const context = loadWorker();
+    const route = {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "Exercism",
+        sourceUrl: "https://exercism.org/tracks/go/exercises/lasagna/edit"
+    };
+    context.route = route;
+    vm.runInContext("returnRoutes = { '1:20': route }", context);
+
+    context.historyStateUpdatedListeners[0]({
+        tabId: 10,
+        frameId: 0,
+        url: "https://exercism.org/tracks/go/exercises/freelancer/edit"
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), undefined);
+});
+
+test("keeps Exercism overview maintenance when the same exercise moves into edit", async () => {
+    const context = loadWorker();
+    const route = {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "Exercism overview",
+        sourceUrl: "https://exercism.org/tracks/go/exercises/lasagna"
+    };
+    context.route = route;
+    vm.runInContext("returnRoutes = { '1:20': route }", context);
+
+    context.historyStateUpdatedListeners[0]({
+        tabId: 10,
+        frameId: 0,
+        url: "https://exercism.org/tracks/go/exercises/lasagna/edit"
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
+});
+
+test("Smart Return resolves an Exercism overview route to its matching editor", async () => {
+    const context = loadWorker();
+    context.tabState.push(
+        {
+            id: 10,
+            windowId: 1,
+            index: 2,
+            url: "https://exercism.org/tracks/go/exercises/lasagna"
+        },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" },
+        {
+            id: 30,
+            windowId: 1,
+            index: 3,
+            url: "https://exercism.org/tracks/go/exercises/lasagna/edit"
+        },
+        {
+            id: 40,
+            windowId: 1,
+            index: 4,
+            url: "https://exercism.org/tracks/go/exercises/freelancer/edit"
+        }
+    );
+    vm.runInContext(`returnRoutes = { '1:20': {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "Exercism overview",
+        sourceUrl: "https://exercism.org/tracks/go/exercises/lasagna"
+    } }`, context);
+    const tabUpdates = [];
+    context.chrome.tabs.update = async (...args) => tabUpdates.push(args);
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1, index: 1 })",
+        context
+    );
+
+    assert.equal(tabUpdates[0][0], 30);
+    assert.equal(tabUpdates[0][1].active, true);
+});
+
+test("keeps a maintained return route on a hash change within the same Codewars kata", async () => {
+    const context = loadWorker();
+    const route = {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "Codewars",
+        sourceUrl: "https://www.codewars.com/kata/example/train/javascript"
+    };
+    context.route = route;
+    vm.runInContext("returnRoutes = { '1:20': route }", context);
+
+    context.referenceFragmentUpdatedListeners[0]({
+        tabId: 10,
+        frameId: 0,
+        url: `${route.sourceUrl}#solution`
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
+});
+
+test("Smart Return clears a stale route before using a source tab with a new URL", async () => {
+    const context = loadWorker();
+    context.tabState.push(
+        {
+            id: 10,
+            windowId: 1,
+            index: 1,
+            url: "https://leetcode.com/problems/maximum-subarray/"
+        },
+        { id: 20, windowId: 1, index: 0, url: "https://chat.deepseek.com/" }
+    );
+    vm.runInContext(`returnRoutes = { '1:20': {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "LeetCode",
+        sourceUrl: "https://leetcode.com/problems/two-sum/",
+        copied: true,
+        copiedText: "old problem answer"
+    } }`, context);
+    const tabUpdates = [];
+    context.chrome.tabs.update = async (...args) => tabUpdates.push(args);
+
+    await vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context);
+
+    assert.equal(tabUpdates.length, 0);
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), undefined);
+});
+
+test("Smart Return finds the matching LeetCode editor from a same-problem submissions tab", async () => {
+    const context = loadWorker();
+    context.tabState.push(
+        {
+            id: 10,
+            windowId: 1,
+            index: 2,
+            url: "https://leetcode.com/problems/two-sum/submissions/2154894608/"
+        },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" },
+        {
+            id: 30,
+            windowId: 1,
+            index: 3,
+            url: "https://leetcode.com/problems/two-sum/"
+        },
+        {
+            id: 40,
+            windowId: 1,
+            index: 4,
+            url: "https://leetcode.com/problems/maximum-subarray/"
+        }
+    );
+    vm.runInContext(`returnRoutes = { '1:20': {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "LeetCode",
+        sourceUrl: "https://leetcode.com/problems/two-sum/"
+    } }`, context);
+    const tabUpdates = [];
+    context.chrome.tabs.update = async (...args) => tabUpdates.push(args);
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1, index: 1 })",
+        context
+    );
+
+    assert.equal(tabUpdates[0][0], 30);
+    assert.equal(tabUpdates[0][1].active, true);
+});
+
+test("Smart Return does not use a different LeetCode problem as a fallback", async () => {
+    const context = loadWorker();
+    context.tabState.push(
+        {
+            id: 10,
+            windowId: 1,
+            index: 2,
+            url: "https://leetcode.com/problems/two-sum/submissions/2154894608/"
+        },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" },
+        {
+            id: 30,
+            windowId: 1,
+            index: 3,
+            url: "https://leetcode.com/problems/maximum-subarray/"
+        }
+    );
+    vm.runInContext(`returnRoutes = { '1:20': {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "LeetCode",
+        sourceUrl: "https://leetcode.com/problems/two-sum/"
+    } }`, context);
+    const tabUpdates = [];
+    context.chrome.tabs.update = async (...args) => tabUpdates.push(args);
+
+    await vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context);
+
+    assert.equal(tabUpdates.length, 0);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].sourceTabId", context), null);
+});
+
 function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}, selectedText = "") {
     const listeners = [];
+    const windowListeners = [];
     const messages = [];
     const context = vm.createContext({
         chrome: {
@@ -61,14 +353,17 @@ function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}, se
             runtime: { sendMessage: message => messages.push(message) }
         },
         document: { addEventListener: (type, listener) => listeners.push({ type, listener }) },
-        window: { getSelection: () => ({ toString: () => selectedText }) },
+        window: {
+            getSelection: () => ({ toString: () => selectedText }),
+            addEventListener: (type, listener) => windowListeners.push({ type, listener })
+        },
         location: { hostname }
     });
     vm.runInContext(
         fs.readFileSync(path.join(ROOT_DIR, "worker", "keyboard_shortcuts.js"), "utf8"),
         context
     );
-    return { context, listeners, messages };
+    return { context, listeners, messages, windowListeners };
 }
 
 test("supports Alt and Shift in shortcut matching", () => {
@@ -137,6 +432,88 @@ test("dispatches Smart Return synchronously on the first shortcut press", () => 
     assert.equal(messages[0].command, "smart-return");
 });
 
+test("blocks held-key repeats and allows another shortcut after keyup", () => {
+    const { listeners, messages } = loadKeyboardShortcuts();
+    const keydown = listeners.find(listener => listener.type === "keydown").listener;
+    const keyup = listeners.find(listener => listener.type === "keyup").listener;
+    const press = repeat => keydown({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat,
+        preventDefault() {},
+        stopPropagation() {}
+    });
+
+    press(false);
+    press(true);
+    press(false);
+    keyup({ key: "q", code: "KeyQ" });
+    press(false);
+
+    assert.deepEqual(messages.map(message => message.type), [
+        "keyboard-shortcut",
+        "keyboard-shortcut-release",
+        "keyboard-shortcut"
+    ]);
+});
+
+test("releases the worker lock when keyup lands in the newly focused page", () => {
+    const { listeners, messages } = loadKeyboardShortcuts("chat.deepseek.com");
+    const keyup = listeners.find(listener => listener.type === "keyup").listener;
+
+    keyup({ key: "q", code: "KeyQ" });
+
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].type, "keyboard-shortcut-release");
+    assert.equal(messages[0].releaseToken, "key:Q");
+});
+
+test("releases the worker lock when mouseup lands in the newly focused page", async () => {
+    const { listeners, messages } = loadKeyboardShortcuts("chat.deepseek.com", {
+        "send-context": ["Alt+Q"],
+        "smart-return": ["Mouse4"]
+    });
+    await Promise.resolve();
+    const mouseup = listeners.find(listener => listener.type === "mouseup").listener;
+
+    mouseup({ button: 3 });
+
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].type, "keyboard-shortcut-release");
+    assert.equal(messages[0].releaseToken, "mouse:Mouse4");
+});
+
+test("clears a stale page lock when the original page regains focus", () => {
+    const { listeners, messages, windowListeners } = loadKeyboardShortcuts();
+    const keydown = listeners.find(listener => listener.type === "keydown").listener;
+    const focus = windowListeners.find(listener => listener.type === "focus").listener;
+    const press = () => keydown({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat: false,
+        preventDefault() {},
+        stopPropagation() {}
+    });
+
+    press();
+    focus();
+    press();
+
+    assert.deepEqual(messages.map(message => message.type), [
+        "keyboard-shortcut",
+        "keyboard-shortcut-release",
+        "keyboard-shortcut"
+    ]);
+});
+
 test("includes selected page text in the send-context shortcut message", () => {
     const { listeners, messages } = loadKeyboardShortcuts(
         "example.com",
@@ -191,6 +568,33 @@ test("dispatches Mouse4 once and releases the shortcut on mouseup", async () => 
     assert.equal(messages[0].command, "send-context");
 });
 
+test("service worker blocks duplicate shortcut messages until release", () => {
+    const context = loadWorker();
+    let starts = 0;
+    context.runWorkflow = async () => { starts += 1; };
+    const onMessage = context.messageListeners[0];
+    const sender = { tab: { id: 10 } };
+    const shortcut = {
+        type: "keyboard-shortcut",
+        command: "send-context",
+        releaseToken: "key:Q"
+    };
+
+    onMessage(shortcut, sender);
+    onMessage(shortcut, sender);
+    assert.equal(starts, 1);
+
+    onMessage({ type: "keyboard-shortcut-release", releaseToken: "key:W" }, sender);
+    onMessage(shortcut, sender);
+    assert.equal(starts, 1);
+
+    onMessage({ type: "keyboard-shortcut-release", releaseToken: "key:Q" }, sender);
+    onMessage(shortcut, sender);
+    assert.equal(starts, 2);
+
+    onMessage({ type: "keyboard-shortcut-release", releaseToken: "key:Q" }, sender);
+});
+
 test("assembles title, description, feedback, and source", () => {
     const context = loadWorker();
     const prompt = vm.runInContext(
@@ -202,6 +606,54 @@ test("assembles title, description, feedback, and source", () => {
     assert.match(prompt, /Find the closest points\./);
     assert.match(prompt, /Failed: 2/);
     assert.match(prompt, /def closest\(points\): pass/);
+});
+
+test("extracts LeetCode source from the focused Monaco editor", async () => {
+    const context = loadWorker();
+    const source = "bool canPlaceFlowers(int* flowerbed, int flowerbedSize, int n) { }";
+    const staleSource = "bool* kidsWithCandies(int* candies, int candiesSize, int extraCandies, int* returnSize) { }";
+    const activeEditorNode = { offsetWidth: 500, offsetHeight: 300 };
+    const staleEditorNode = { offsetWidth: 0, offsetHeight: 0 };
+    const element = text => ({
+        innerText: text,
+        cloneNode: () => ({ querySelectorAll: () => [], innerText: text })
+    });
+    const activeModel = { getValue: () => source };
+    const staleModel = { getValue: () => staleSource };
+    const editors = [
+        { getDomNode: () => staleEditorNode, getModel: () => staleModel },
+        { getDomNode: () => activeEditorNode, getModel: () => activeModel }
+    ];
+
+    context.document = {
+        activeElement: {
+            closest: selector => selector === ".monaco-editor" ? activeEditorNode : null
+        },
+        title: "Can Place Flowers - LeetCode",
+        querySelector(selector) {
+            if (selector === "h1") return element("Can Place Flowers");
+            if (selector === '[data-track-load="description_content"]') {
+                return element("Plant flowers without adjacent plots.");
+            }
+            return null;
+        },
+        querySelectorAll: () => []
+    };
+    context.window = {
+        monaco: {
+            editor: {
+                getEditors: () => editors,
+                getModels: () => [staleModel, activeModel]
+            }
+        }
+    };
+    context.chrome.scripting.executeScript = async ({ func }) => [{ result: await func() }];
+
+    const result = await vm.runInContext("LeetCodeAdapter.getContext(1)", context);
+
+    assert.equal(result.title, "Can Place Flowers");
+    assert.equal(result.source, source);
+    assert.doesNotMatch(result.source, /kidsWithCandies/);
 });
 
 test("sends selected text instead of page context and keeps full context as the default", async () => {
@@ -581,6 +1033,61 @@ test("uses the Exercism test-and-submit adapter after replacing code", async () 
 
     submittedTabId = context.submittedTabId;
     assert.equal(submittedTabId, 10);
+});
+
+test("Smart Return writes to the Codewars solution editor and attempts the full suite", async () => {
+    const context = loadWorker();
+    const solution = {
+        value: "starter code",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; },
+        focus() { this.focused = true; }
+    };
+    let attemptCount = 0;
+    const attemptButton = {
+        offsetWidth: 80,
+        offsetHeight: 30,
+        click() { attemptCount += 1; }
+    };
+    context.document = {
+        querySelector(selector) {
+            if (selector === "#code .js-editor .CodeMirror") {
+                return { CodeMirror: solution };
+            }
+            if (selector === "#attempt_btn") {
+                return attemptButton;
+            }
+            return null;
+        }
+    };
+    context.executePage = async (_tabId, pageFunction, args = []) =>
+        pageFunction(...args);
+    context.readClipboard = async () => "public class XO { /* fixed */ }";
+    context.chrome.tabs.get = async () => ({
+        id: 10,
+        url: "https://www.codewars.com/kata/55908aad6620c066bc00002a/train/java"
+    });
+    context.chrome.tabs.update = async () => {};
+    context.tabState.push(
+        {
+            id: 10,
+            windowId: 1,
+            index: 0,
+            url: "https://www.codewars.com/kata/55908aad6620c066bc00002a/train/java"
+        },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Codewars', copied: true, copiedText: 'public class XO { /* fixed */ }' } }",
+        context
+    );
+
+    await vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context);
+
+    assert.equal(solution.value, "public class XO { /* fixed */ }");
+    assert.equal(solution.focused, true);
+    assert.equal(attemptCount, 1);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copied", context), false);
 });
 
 test("waits for Exercism editor state to reflect replaced code before running tests", async () => {

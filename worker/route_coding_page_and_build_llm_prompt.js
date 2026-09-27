@@ -42,6 +42,41 @@ function getPlatform(url) {
     return platform || SourceFallbackAdapter;
 }
 
+function getCodingPageIdentity(url, platformName) {
+    try {
+        const parsedUrl = new URL(pageUrl(url));
+        const pathname = parsedUrl.pathname;
+
+        if (platformName === "LeetCode") {
+            const match = pathname.match(/^\/problems\/([^/]+)(?:\/|$)/);
+            return match ? `LeetCode:${match[1]}` : "";
+        }
+
+        if (platformName === "Exercism" || platformName === "Exercism overview") {
+            const match = pathname.match(
+                /^\/tracks\/([^/]+)\/exercises\/([^/]+)(?:\/edit)?\/?$/
+            );
+            return match ? `Exercism:${match[1]}:${match[2]}` : "";
+        }
+
+        if (platformName === "Codewars") {
+            const match = pathname.match(
+                /^\/kata\/([^/]+)(?:\/train\/([^/]+))?\/?$/
+            );
+            return match
+                ? `Codewars:${match[1]}:${match[2] || ""}`
+                : "";
+        }
+
+        const platform = getPlatform(parsedUrl.href);
+        return platform.name === platformName
+            ? `${parsedUrl.origin}${pathname}${parsedUrl.search}${parsedUrl.hash}`
+            : "";
+    } catch (_) {
+        return "";
+    }
+}
+
 function buildPrompt(context) {
     const sections = [
         context.title || "",

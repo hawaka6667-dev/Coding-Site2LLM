@@ -19,6 +19,7 @@ function readManifest() {
 test("keeps extension commands and content scripts registered", () => {
     const manifest = readManifest();
 
+    assert.ok(manifest.permissions.includes("webNavigation"));
     assert.equal(manifest.commands, undefined);
     assert.deepEqual(manifest.options_ui, {
         page: "options/options.html",

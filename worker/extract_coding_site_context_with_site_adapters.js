@@ -320,7 +320,74 @@ const LeetCodeAdapter = {
     name: "LeetCode",
 
     match(url) {
-        return LEETCODE_URL.test(url);
+        return LEETCODE_URL.test(url) || LEETCODE_SUBMISSIONS_URL.test(url);
+    },
+
+    async replaceCode(tabId, text) {
+        const replaced = await executePage(tabId, async value => {
+            const deadline = Date.now() + 5000;
+
+            while (Date.now() < deadline) {
+                const monaco = window.monaco?.editor;
+
+                if (monaco) {
+                    const editors = typeof monaco.getEditors === "function"
+                        ? monaco.getEditors()
+                        : [];
+                    const activeEditorNode = document.activeElement
+                        ?.closest?.(".monaco-editor");
+                    const visibleEditors = editors.filter(editor => {
+                        const node = editor.getDomNode?.();
+                        const bounds = node?.getBoundingClientRect?.();
+                        return node?.isConnected !== false && (
+                            bounds
+                                ? bounds.width > 0 && bounds.height > 0
+                                : node?.offsetWidth > 0 && node?.offsetHeight > 0
+                        );
+                    });
+                    const hasWritableModel = editor => {
+                        const model = editor.getModel?.();
+                        return model && typeof model.setValue === "function";
+                    };
+                    const focusedEditor = visibleEditors.find(candidate =>
+                        candidate.hasTextFocus?.() && hasWritableModel(candidate)
+                    );
+                    const activeElementEditor = visibleEditors.find(candidate =>
+                        candidate.getDomNode?.() === activeEditorNode &&
+                        hasWritableModel(candidate)
+                    );
+                    const writableEditors = visibleEditors.filter(hasWritableModel);
+                    const editor = focusedEditor || activeElementEditor ||
+                        (writableEditors.length === 1 ? writableEditors[0] : null);
+                    const model = editor?.getModel?.() ||
+                        (typeof monaco.getEditors !== "function"
+                            ? monaco.getModels?.().find(candidate =>
+                                typeof candidate.setValue === "function"
+                            )
+                            : null);
+
+                    if (model) {
+                        try {
+                            model.setValue(value);
+                            editor?.focus?.();
+                            if (model.getValue?.() === value) {
+                                return true;
+                            }
+                        } catch (_) {
+                            // The editor may be replaced while a problem switch settles.
+                        }
+                    }
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            return false;
+        }, [text]);
+
+        if (replaced !== true) {
+            throw new Error("Could not replace code in the LeetCode editor.");
+        }
     },
 
     async getContext(tabId) {
@@ -389,21 +456,33 @@ const LeetCodeAdapter = {
                 .sort((left, right) => right.text.length - left.text.length)[0]?.text || "";
 
             if (window.monaco && window.monaco.editor) {
-                const models = window.monaco.editor.getModels();
+                const monaco = window.monaco.editor;
+                const editors = typeof monaco.getEditors === "function"
+                    ? monaco.getEditors()
+                    : [];
+                const activeEditorNode = document.activeElement
+                    ?.closest?.(".monaco-editor");
+                const activeEditor = editors.find(editor =>
+                    editor.getDomNode?.() === activeEditorNode
+                );
+                const visibleEditor = editors.find(editor => {
+                    const node = editor.getDomNode?.();
+                    return node?.offsetWidth > 0 && node?.offsetHeight > 0;
+                });
+                const model = activeEditor?.getModel?.() ||
+                    visibleEditor?.getModel?.() ||
+                    monaco.getModels?.()[0];
+                const source = model?.getValue?.();
 
-                for (const model of models) {
-                    const source = model.getValue();
-
-                    if (typeof source === "string" && source.trim()) {
-                        return {
-                            found: true,
-                            method: "Monaco",
-                            source,
-                            title,
-                            description,
-                            feedback
-                        };
-                    }
+                if (typeof source === "string" && source.trim()) {
+                    return {
+                        found: true,
+                        method: "Monaco",
+                        source,
+                        title,
+                        description,
+                        feedback
+                    };
                 }
             }
 
@@ -502,6 +581,41 @@ const CodewarsAdapter = {
 
     match(url) {
         return CODEWARS_URL.test(url);
+    },
+
+    async replaceCode(tabId, text) {
+        const replaced = await executePage(tabId, value => {
+            const editor = document.querySelector("#code .js-editor .CodeMirror")?.CodeMirror;
+
+            if (!editor || typeof editor.setValue !== "function") {
+                return false;
+            }
+
+            editor.setValue(value);
+            editor.focus();
+            return editor.getValue() === value;
+        }, [text]);
+
+        if (replaced !== true) {
+            throw new Error("Could not replace code in the Codewars solution editor.");
+        }
+    },
+
+    async testAndSubmit(tabId) {
+        const submitted = await executePage(tabId, () => {
+            const attempt = document.querySelector("#attempt_btn");
+
+            if (!attempt || attempt.offsetWidth === 0 || attempt.offsetHeight === 0) {
+                return false;
+            }
+
+            attempt.click();
+            return true;
+        });
+
+        if (submitted !== true) {
+            throw new Error("Could not find the Codewars Attempt button.");
+        }
     },
 
     async getContext(tabId) {

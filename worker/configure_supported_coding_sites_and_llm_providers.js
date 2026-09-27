@@ -11,7 +11,10 @@ const EXERCISM_OVERVIEW_URL =
     /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/?#]+\/?(?:[?#]|$)/;
 
 const LEETCODE_URL =
-    /^https:\/\/leetcode\.com\/problems\/[^/]+\/?/;
+    /^https:\/\/leetcode\.com\/problems\/[^/?#]+\/?(?:[?#]|$)/;
+
+const LEETCODE_SUBMISSIONS_URL =
+    /^https:\/\/leetcode\.com\/problems\/[^/?#]+\/submissions\/[^/?#]+\/?(?:[?#]|$)/;
 
 const CODEWARS_URL =
     /^https:\/\/(?:www\.)?codewars\.com\/kata\/[^/?#]+(?:[/?#]|$)/;

@@ -232,7 +232,7 @@ function loadWorker({ tabs = [], autoMarkComplete = true } = {}) {
 test("routes supported exercise pages to their adapters", () => {
     const context = loadWorker();
     const result = vm.runInContext(
-        "({ exercism: getPlatform('https://exercism.org/tracks/c/exercises/hello-world/edit').name, overview: getPlatform('https://exercism.org/tracks/c/exercises/hello-world').name, leetcode: getPlatform('https://leetcode.com/problems/two-sum/').name, codewars: getPlatform('https://www.codewars.com/kata/55c45be3b2079ecccb00010b/train/javascript').name })",
+        "({ exercism: getPlatform('https://exercism.org/tracks/c/exercises/hello-world/edit').name, overview: getPlatform('https://exercism.org/tracks/c/exercises/hello-world').name, leetcode: getPlatform('https://leetcode.com/problems/two-sum/').name, leetcodeSubmissions: getPlatform('https://leetcode.com/problems/dota2-senate/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75').name, codewars: getPlatform('https://www.codewars.com/kata/55c45be3b2079ecccb00010b/train/javascript').name })",
         context
     );
 
@@ -240,8 +240,181 @@ test("routes supported exercise pages to their adapters", () => {
         exercism: "Exercism",
         overview: "Exercism overview",
         leetcode: "LeetCode",
+        leetcodeSubmissions: "LeetCode",
         codewars: "Codewars"
     }));
+});
+
+test("Smart Return skips a LeetCode submissions tab and targets the problem editor", () => {
+    const context = loadWorker();
+    const tabs = [
+        { id: 1, index: 0, url: "https://chat.deepseek.com/" },
+        {
+            id: 2,
+            index: 1,
+            url: "https://leetcode.com/problems/dota2-senate/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75"
+        },
+        {
+            id: 3,
+            index: 2,
+            url: "https://leetcode.com/problems/dota2-senate/?envType=study-plan-v2&envId=leetcode-75"
+        }
+    ];
+
+    assert.equal(
+        vm.runInContext(
+            "findRightCodingTab(tabs, tabs[0], 'LeetCode').id",
+            vm.createContext({ ...context, tabs })
+        ),
+        3
+    );
+});
+
+test("writes returned code to the active LeetCode editor after switching list problems", async () => {
+    const context = loadWorker();
+    const oldProblemModel = {
+        value: "old problem source",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; }
+    };
+    const activeProblemModel = {
+        value: "new problem source",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; }
+    };
+    const hiddenNode = { offsetWidth: 0, offsetHeight: 0 };
+    const activeNode = { offsetWidth: 800, offsetHeight: 500 };
+    const activeEditor = {
+        getDomNode: () => activeNode,
+        getModel: () => activeProblemModel,
+        focus() {}
+    };
+
+    context.document = {
+        activeElement: { closest: () => activeNode }
+    };
+    context.window = {
+        monaco: {
+            editor: {
+                getEditors: () => [
+                    { getDomNode: () => hiddenNode, getModel: () => oldProblemModel },
+                    activeEditor
+                ],
+                getModels: () => [oldProblemModel, activeProblemModel]
+            }
+        }
+    };
+    context.chrome.scripting.executeScript = async ({ func, args }) => [
+        { result: await func(...args) }
+    ];
+
+    await vm.runInContext(
+        "getPlatform('https://leetcode.com/problems/next-problem/').replaceCode(7, 'returned solution')",
+        context
+    );
+
+    assert.equal(oldProblemModel.value, "old problem source");
+    assert.equal(activeProblemModel.value, "returned solution");
+});
+
+test("ignores zero-layout LeetCode Monaco editors with small nonzero offsets", async () => {
+    const context = loadWorker();
+    const hiddenProblemModel = {
+        value: "old problem source",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; }
+    };
+    const activeProblemModel = {
+        value: "new problem source",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; }
+    };
+    const hiddenNode = {
+        isConnected: true,
+        offsetWidth: 5,
+        offsetHeight: 5,
+        getBoundingClientRect: () => ({ width: 0, height: 0 })
+    };
+    const activeNode = {
+        isConnected: true,
+        offsetWidth: 800,
+        offsetHeight: 500,
+        getBoundingClientRect: () => ({ width: 800, height: 500 })
+    };
+    const activeEditor = {
+        getDomNode: () => activeNode,
+        getModel: () => activeProblemModel,
+        focus() {}
+    };
+
+    context.document = { activeElement: null };
+    context.window = {
+        monaco: {
+            editor: {
+                getEditors: () => [
+                    { getDomNode: () => hiddenNode, getModel: () => hiddenProblemModel },
+                    activeEditor
+                ],
+                getModels: () => [hiddenProblemModel, activeProblemModel]
+            }
+        }
+    };
+    context.chrome.scripting.executeScript = async ({ func, args }) => [
+        { result: await func(...args) }
+    ];
+
+    await vm.runInContext(
+        "getPlatform('https://leetcode.com/problems/odd-even-linked-list/').replaceCode(7, 'returned solution')",
+        context
+    );
+
+    assert.equal(hiddenProblemModel.value, "old problem source");
+    assert.equal(activeProblemModel.value, "returned solution");
+});
+
+test("waits for the LeetCode Monaco editor to mount after switching problems", async () => {
+    const context = loadWorker();
+    const activeProblemModel = {
+        value: "new problem source",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; }
+    };
+    const oldProblemModel = {
+        value: "old problem source",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; }
+    };
+    const activeNode = { offsetWidth: 800, offsetHeight: 500 };
+    const activeEditor = {
+        getDomNode: () => activeNode,
+        getModel: () => activeProblemModel,
+        focus() {}
+    };
+    let editorReady = false;
+
+    context.document = { activeElement: null };
+    context.window = {
+        monaco: {
+            editor: {
+                getEditors: () => editorReady ? [activeEditor] : [],
+                getModels: () => editorReady
+                    ? [oldProblemModel, activeProblemModel]
+                    : [oldProblemModel]
+            }
+        }
+    };
+    context.chrome.scripting.executeScript = async ({ func, args }) => [
+        { result: await func(...args) }
+    ];
+    setTimeout(() => { editorReady = true; }, 25);
+
+    await vm.runInContext(
+        "getPlatform('https://leetcode.com/problems/next-problem/').replaceCode(7, 'returned solution')",
+        context
+    );
+
+    assert.equal(oldProblemModel.value, "old problem source");
+    assert.equal(activeProblemModel.value, "returned solution");
 });
 
 test("opens the same submitted Exercism overview in an unfocused window only when enabled", async () => {

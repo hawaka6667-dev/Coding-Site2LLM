@@ -72,13 +72,23 @@ function normalizeShortcutList(value) {
     return bindings.filter(binding => typeof binding === "string").slice(0, 2);
 }
 
+function getReleaseToken(binding) {
+    return binding.startsWith("Mouse")
+        ? `mouse:${binding}`
+        : `key:${getBindingKey(binding).toUpperCase()}`;
+}
+
 function triggerShortcut(event, command, binding) {
     shortcutHeld = true;
     heldShortcut = binding;
     event.preventDefault();
     event.stopPropagation();
     try {
-        const message = { type: "keyboard-shortcut", command };
+        const message = {
+            type: "keyboard-shortcut",
+            command,
+            releaseToken: getReleaseToken(binding)
+        };
         const selectedText = command === "send-context"
             ? window.getSelection()?.toString() || ""
             : "";
@@ -93,10 +103,18 @@ function triggerShortcut(event, command, binding) {
 }
 
 function releaseShortcut() {
+    const releaseToken = getReleaseToken(heldShortcut);
     shortcutHeld = false;
     heldShortcut = "";
+    sendShortcutRelease(releaseToken);
+}
+
+function sendShortcutRelease(releaseToken) {
     try {
-        chrome.runtime.sendMessage({ type: "keyboard-shortcut-release" });
+        chrome.runtime.sendMessage({
+            type: "keyboard-shortcut-release",
+            releaseToken
+        });
     } catch (_) {
         // The extension context may disappear while an existing tab remains open.
     }
@@ -153,21 +171,44 @@ document.addEventListener("mousedown", event => {
 }, true);
 
 document.addEventListener("keyup", event => {
-    if (!shortcutHeld || heldShortcut.startsWith("Mouse")) {
+    const releasedKey = getEventKey(event).toUpperCase();
+
+    if (shortcutHeld && !heldShortcut.startsWith("Mouse")) {
+        if (releasedKey === getBindingKey(heldShortcut).toUpperCase()) {
+            releaseShortcut();
+        }
         return;
     }
 
-    if (getEventKey(event).toUpperCase() === getBindingKey(heldShortcut).toUpperCase()) {
-        releaseShortcut();
+    const matchingBinding = Object.values(shortcuts)
+        .flat()
+        .find(binding => !binding.startsWith("Mouse") &&
+            releasedKey === getBindingKey(binding).toUpperCase());
+
+    if (matchingBinding) {
+        sendShortcutRelease(getReleaseToken(matchingBinding));
     }
 }, true);
 
+window.addEventListener?.("focus", () => {
+    if (shortcutHeld) {
+        releaseShortcut();
+    }
+});
+
 document.addEventListener("mouseup", event => {
-    if (!shortcutHeld || !heldShortcut.startsWith("Mouse")) {
+    if (shortcutHeld && heldShortcut.startsWith("Mouse")) {
+        if (event.button === (heldShortcut === "Mouse4" ? 3 : 4)) {
+            releaseShortcut();
+        }
         return;
     }
 
-    if (event.button === (heldShortcut === "Mouse4" ? 3 : 4)) {
-        releaseShortcut();
+    const matchingBinding = Object.values(shortcuts)
+        .flat()
+        .find(binding => binding === (event.button === 3 ? "Mouse4" : "Mouse5"));
+
+    if (matchingBinding) {
+        sendShortcutRelease(getReleaseToken(matchingBinding));
     }
 }, true);

@@ -10,7 +10,8 @@
     "tabs",
     "scripting",
     "storage",
-    "activeTab"
+    "activeTab",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://exercism.org/*",
