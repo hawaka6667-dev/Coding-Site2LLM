@@ -5,12 +5,8 @@
 !.build/package.ps1
 !.build/release.ps1
 
-# Generated from the TypeScript service-worker sources.
-/extension/background.js
-/extension/worker/manage_icon_theme.js
-/extension/worker/configure_supported_coding_sites_and_llm_providers.js
-/extension/worker/inject_scripts_and_control_coding_page.js
-/extension/worker/route_coding_page_and_build_llm_prompt.js
-/extension/worker/find_llm_tab_and_insert_prompt.js
-/extension/worker/run_coding_context_to_llm_workflow.js
-/extension/worker/adapters/*.js
+# Generated extension package: compiled TypeScript and copied runtime assets.
+/dist/
+
+
+#    通配符wildcard      类 glob

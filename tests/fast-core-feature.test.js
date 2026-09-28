@@ -10,7 +10,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const ROOT_DIR = path.join(__dirname, "..", "extension");
+const ROOT_DIR = path.join(__dirname, "..", "dist");
 
 function loadWorker() {
     const tabState = [];

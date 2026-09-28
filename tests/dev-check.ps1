@@ -6,7 +6,7 @@
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$extensionRoot = Join-Path $root "extension"
+$distRoot = Join-Path $root "dist"
 
 function Fail-Check([string]$reason) {
     Write-Host "FAIL: $reason" -ForegroundColor Red
@@ -27,12 +27,12 @@ Write-Host "Coding Site2LLM development preflight"
 
 try {
     $packageJson = Get-Content -LiteralPath (Join-Path $root "package.json") -Raw | ConvertFrom-Json
-    $manifest = Get-Content -LiteralPath (Join-Path $extensionRoot "manifest.json") -Raw | ConvertFrom-Json
+    $manifest = Get-Content -LiteralPath (Join-Path $distRoot "manifest.json") -Raw | ConvertFrom-Json
 } catch {
-    Fail-Check "package.json or extension/manifest.json is missing or invalid: $($_.Exception.Message)"
+    Fail-Check "package.json or dist/manifest.json is missing or invalid: $($_.Exception.Message)"
 }
 
-$extensionFiles = @(
+$distFiles = @(
     "manifest.json",
     "background.js",
     "worker/exercism/edit/content.js",
@@ -53,9 +53,9 @@ $repositoryFiles = @(
     "tests/version-contract.test.js"
 )
 
-foreach ($file in $extensionFiles) {
-    Require-Check (Test-Path -LiteralPath (Join-Path $extensionRoot $file) -PathType Leaf) `
-        "Required extension file is missing: extension/$file"
+foreach ($file in $distFiles) {
+    Require-Check (Test-Path -LiteralPath (Join-Path $distRoot $file) -PathType Leaf) `
+        "Required extension package file is missing: dist/$file"
 }
 
 foreach ($file in $repositoryFiles) {

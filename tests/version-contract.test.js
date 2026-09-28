@@ -11,7 +11,8 @@ const path = require("node:path");
 const test = require("node:test");
 
 const ROOT_DIR = path.join(__dirname, "..");
-const EXTENSION_ROOT = path.join(ROOT_DIR, "extension");
+const SOURCE_ROOT = path.join(ROOT_DIR, "src");
+const DIST_ROOT = path.join(ROOT_DIR, "dist");
 
 function readJson(file, basePath = ROOT_DIR) {
     return JSON.parse(fs.readFileSync(path.join(basePath, file), "utf8"));
@@ -19,8 +20,9 @@ function readJson(file, basePath = ROOT_DIR) {
 
 test("uses the version policy documented in helper.md", () => {
     const helper = fs.readFileSync(path.join(ROOT_DIR, "helper.md"), "utf8");
-    const manifest = readJson("manifest.json", EXTENSION_ROOT);
+    const manifest = readJson("manifest.json", DIST_ROOT);
     const packageJson = readJson("package.json");
+    const builder = fs.readFileSync(path.join(ROOT_DIR, ".build", "build-extension.js"), "utf8");
     const packager = fs.readFileSync(path.join(ROOT_DIR, ".build", "package.ps1"), "utf8");
 
     assert.match(helper, /Documentation-only changes, tests, and bug fixes do not increment the version/);
@@ -37,14 +39,20 @@ test("uses the version policy documented in helper.md", () => {
     );
     assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "package.ps1")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "release.ps1")), true);
-    assert.match(packager, /Join-Path \$projectRoot "extension"/);
-    assert.match(packager, /Join-Path \$extensionSource "manifest\.json"/);
+    assert.equal(
+        packageJson.scripts["build:extension"],
+        "node .build/build-extension.js"
+    );
+    assert.match(builder, /icons\/icon-preview\.html/);
+    assert.match(packager, /Join-Path \$projectRoot "dist"/);
+    assert.match(packager, /--pack-extension=\$distRoot/);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "manifest.json")), false);
-    assert.equal(fs.existsSync(path.join(EXTENSION_ROOT, "icons", "icon-preview.html")), false);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "extension")), false);
+    assert.equal(fs.existsSync(path.join(SOURCE_ROOT, "icons", "icon-preview.html")), true);
 });
 
 test("current feature release advances beyond the previous release tag", () => {
-    const manifest = readJson("manifest.json", EXTENSION_ROOT);
+    const manifest = readJson("manifest.json", DIST_ROOT);
     const latestTag = execFileSync(
         "git",
         ["tag", "--list", "--sort=-version:refname"],

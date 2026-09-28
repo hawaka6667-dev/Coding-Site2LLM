@@ -12,6 +12,10 @@ reload
 做一下简单cleanup，主要是readability  ❌       review
 ---
 
+如果遇到1000行或很多代码的，看一下是否coupling，如果是，拆成像worker那样的文件夹小文件结构
+
+TS migration：还没完成
+
 neet支持 ？？？
 codewar  回填没删除 没submit   ✔
 ctf
@@ -30,7 +34,7 @@ discord管理
 
 
 下个版本
-开发者面板 + 外部管理
+开发者面板 
 
 积木性测试
 
@@ -58,7 +62,7 @@ list pages弹一条通知             ？？？？？
 ←自己点击确认调试
 
 
-/网站包
+/网站包       导航📌
 加neet、Codingame、牛客网。。。CTF，HackerRank, AtCoder, NeetCode。。。。。。。。
 
 推荐学习方案

@@ -10,9 +10,22 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const ROOT_DIR = path.join(__dirname, "..", "extension");
+const PROJECT_ROOT = path.join(__dirname, "..");
+const SOURCE_ROOT = path.join(PROJECT_ROOT, "src");
+const ROOT_DIR = path.join(PROJECT_ROOT, "dist");
+
+function listFiles(directory) {
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        const entryPath = path.join(directory, entry.name);
+        return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
+    });
+}
 
 function readManifest() {
+    assert.equal(fs.existsSync(path.join(SOURCE_ROOT, "icons", "icon-preview.html")), true);
+    assert.equal(fs.existsSync(path.join(PROJECT_ROOT, ".build", "build-extension.js")), true);
+    assert.equal(fs.existsSync(path.join(PROJECT_ROOT, "scripts")), false);
+    assert.equal(fs.existsSync(path.join(PROJECT_ROOT, "tools")), false);
     return JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "manifest.json"), "utf8"));
 }
 
@@ -31,6 +44,33 @@ test("keeps the extension runtime isolated from repository tooling", () => {
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "icons", "icon-preview.html")), false);
     for (const file of runtimeFiles) {
         assert.equal(fs.existsSync(path.join(ROOT_DIR, file)), true, `Missing extension file: ${file}`);
+    }
+});
+
+test("keeps TypeScript output in dist instead of beside source files", () => {
+    const sourceFiles = listFiles(SOURCE_ROOT);
+    const typescriptFiles = sourceFiles.filter(file =>
+        file.endsWith(".ts") && !file.endsWith(".d.ts")
+    );
+
+    assert.ok(typescriptFiles.length > 0);
+    assert.equal(fs.existsSync(path.join(PROJECT_ROOT, "extension")), false);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "background.ts")), false);
+
+    for (const sourceFile of typescriptFiles) {
+        const relativeSource = path.relative(SOURCE_ROOT, sourceFile);
+        const javascriptFile = relativeSource.replace(/\.ts$/, ".js");
+
+        assert.equal(
+            fs.existsSync(path.join(SOURCE_ROOT, javascriptFile)),
+            false,
+            `Generated JavaScript must not be beside ${relativeSource}`
+        );
+        assert.equal(
+            fs.existsSync(path.join(ROOT_DIR, javascriptFile)),
+            true,
+            `Missing compiled output for ${relativeSource}`
+        );
     }
 });
 

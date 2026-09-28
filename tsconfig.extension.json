@@ -8,8 +8,9 @@
     "noImplicitAny": true,
     "strict": false,
     "skipLibCheck": true,
-    "rootDir": "extension",
+    "rootDir": "src",
+    "outDir": "dist",
     "noEmitOnError": true
   },
-  "include": ["extension/background.ts", "extension/worker/**/*.ts", "extension/worker/**/*.d.ts"]
+  "include": ["src/background.ts", "src/worker/**/*.ts", "src/worker/**/*.d.ts"]
 }

@@ -3,7 +3,7 @@
   "private": true,
   "_comment": "test:all is intentionally disabled. Original: npm run test:unit && npm run test:routing && npm run test:contracts && npm run test:version",
   "scripts": {
-    "build:extension": "tsc -p tsconfig.extension.json",
+    "build:extension": "node .build/build-extension.js",
     "typecheck:extension": "tsc --noEmit -p tsconfig.extension.json",
     "prepackage:crx": "npm run build:extension",
     "package:crx": "powershell -ExecutionPolicy Bypass -File .build/package.ps1",

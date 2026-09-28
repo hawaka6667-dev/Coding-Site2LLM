@@ -8,8 +8,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$extensionSource = Join-Path $projectRoot "extension"
-$manifest = Get-Content -Raw -Path (Join-Path $extensionSource "manifest.json") | ConvertFrom-Json
+$distRoot = Join-Path $projectRoot "dist"
+$manifest = Get-Content -Raw -Path (Join-Path $distRoot "manifest.json") | ConvertFrom-Json
 $version = $manifest.version
 $keyPath = Join-Path $PSScriptRoot "coding-site2llm.pem"
 $outputDirectory = if ($OutputDirectory) {
@@ -17,8 +17,8 @@ $outputDirectory = if ($OutputDirectory) {
 } else {
     $PSScriptRoot
 }
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "coding-site2llm-$version-$PID"
-$extensionRoot = Join-Path $tempRoot "extension"
+$generatedCrx = "$distRoot.crx"
+$generatedKey = "$distRoot.pem"
 $chromeCandidates = @(
     (Join-Path ${env:ProgramFiles} "Google\Chrome\Application\chrome.exe"),
     (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe"),
@@ -30,31 +30,18 @@ if (-not $chromePath) {
     throw "Chrome executable was not found."
 }
 
-$filesToCopy = @(
-    "manifest.json",
-    "background.js",
-    "icons",
-    "options",
-    "popup",
-    "worker"
-)
-
-New-Item -ItemType Directory -Force -Path $extensionRoot, $outputDirectory | Out-Null
+New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $outputDirectory "Coding-Site2LLM-*.crx")
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $outputDirectory "Coding-Site2LLM-*.zip")
+Remove-Item -Force -ErrorAction SilentlyContinue $generatedCrx, $generatedKey
 
 try {
-    foreach ($item in $filesToCopy) {
-        Copy-Item -Recurse -Force (Join-Path $extensionSource $item) $extensionRoot
-    }
-
-    $chromeArguments = @("--pack-extension=$extensionRoot")
+    $chromeArguments = @("--pack-extension=$distRoot")
     if (Test-Path $keyPath) {
         $chromeArguments += "--pack-extension-key=$keyPath"
     }
     & $chromePath @chromeArguments
 
-    $generatedCrx = "$extensionRoot.crx"
     $waitAttempts = 0
     while (-not (Test-Path $generatedCrx) -and $waitAttempts -lt 20) {
         Start-Sleep -Milliseconds 250
@@ -65,7 +52,6 @@ try {
     }
 
     if (-not (Test-Path $keyPath)) {
-        $generatedKey = "$extensionRoot.pem"
         if (-not (Test-Path $generatedKey)) {
             throw "Chrome did not create a signing key."
         }
@@ -76,14 +62,12 @@ try {
     $crxPath = Join-Path $outputDirectory "$releaseBaseName.crx"
     $zipPath = Join-Path $outputDirectory "$releaseBaseName.zip"
     Copy-Item -Force $generatedCrx $crxPath
-    Compress-Archive -Path (Join-Path $extensionRoot "*") -DestinationPath $zipPath
+    Compress-Archive -Path (Join-Path $distRoot "*") -DestinationPath $zipPath
 
     Write-Host "CRX created: $crxPath"
     Write-Host "ZIP created: $zipPath"
     Write-Host "Signing key: $keyPath"
 }
 finally {
-    if (Test-Path $tempRoot) {
-        Remove-Item -Recurse -Force $tempRoot
-    }
+    Remove-Item -Force -ErrorAction SilentlyContinue $generatedCrx, $generatedKey
 }
