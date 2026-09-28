@@ -41,12 +41,12 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | prompt、site context | `src/worker/adapters/` | `npm run test:unit` |
 | URL routing 和 site routing | `src/worker/route_coding_page_and_build_llm_prompt.ts` | `npm run test:routing` |
 | Exercism overview redirect and completion confirmation | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism track-list scroll restoration | `src/worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism track-list scroll restoration | `src/worker/exercism/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:routing` |
 | Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts` | `npm run test:unit` |
-| Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/fast-core-feature.test.js` | `npm run test:unit` |
+| Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/exercism/edit/continue-dialogs.test.js` | `npm run test:unit` |
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
-| extension injection 和 manifest | `src/manifest.json`, `src/worker/` | `npm run test:contracts` |
+| extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
 | development environment and generated package | `tests/dev-check.ps1`, `package.json`, `src/manifest.json`, `dist/` | `npm run dev:check` |
 
 `dev:check` 检查 repository entry points、manifest 和 Chrome process。浏览器实时状态直接通过 Chrome DevTools MCP 的 `list_pages` 查看；不需要导出、保存或维护快照文件。
@@ -64,11 +64,11 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 ### 测试挂起与超时防护
 
 - 新增或修改 asynchronous tests 时，检查每个 pending Promise 在 test path 上都能 resolve 或 reject；VM/iframe 等 isolated context 使用的 callbacks 和 resolvers 必须显式注入，避免 error 被异步捕获后 test 仍无限等待。
-- 怀疑 Node test hang 时先单独运行，并启用 test-level timeout，例如 `node --test --test-timeout=10000 tests/fast-core-feature.test.js`；不要为了排查直接运行 `test:all`。
+- 测试按功能放在 `tests/worker/`、`tests/routing/` 和 `tests/exercism/`；共享 VM harness 位于 `tests/worker-test-harness.js`。怀疑 Node test hang 时先单独运行对应文件并启用 test-level timeout，例如 `node --test --test-timeout=10000 tests/worker/smart-return-workflow.test.js`；不要为了排查直接运行 `test:all`。
 - timeout 用来发现 test 未完成，不等同于证明存在 infinite loop。Synchronous infinite loop 会 block event loop，应使用 external process-level timeout 并检查 CPU usage；pending async Promise 通常表现为 test timeout 或进程仍有 active handles。
 - 断言 VM 等 cross-realm values 时，比较明确 fields，或先转换为 host-realm plain objects，避免 prototype mismatch 造成误报。
 
-Documentation-only changes, tests, and bug fixes do not increment the version. By default, new features increment the patch version by `0.01`; a larger feature or architecture milestone may advance the minor version and reset the patch to `0`. Git tags and GitHub Releases retain the release history.
+Every delivered change increments the four-part extension version `major.minor.batch.change` so different builds do not share a release number. Each small change, including fixes, tests, and documentation, increments the final segment by `0.0.0.1` (for example, `0.5.6.0` to `0.5.6.1`). A large one-time batch of changes increments the batch segment by `0.0.1` and resets the final segment to `0` (for example, `0.5.6.3` to `0.5.7.0`). Larger feature or architecture milestones increment the minor segment by `0.1.0.0`; breaking or major milestones increment the major segment by `1.0.0.0`, resetting lower segments to `0`. Historical three-part release tags are treated as having a final segment of `0`. Git tags and GitHub Releases retain the release history.
 
 ### 浏览器探测原则
 
@@ -142,7 +142,7 @@ LLM 页不主动分析题目。扩展只负责传输已有页面上下文。
 
 切题、返回题目或其它同页路由切换后，必须在动作发生时重新读取当前 URL、可见 editor 和它绑定的 model；不能复用页面初次加载时缓存的 editor/model。若 editor 正在卸载或重建，adapter 可有界等待当前可见实例就绪；editor 列表暂时为空时，不得把残留的全局旧 model 当成当前 editor 写入。
 
-Exercism 的 `Back to Exercise` 是具体的 Turbo 导航例子：`return_to_editor_after_submit_redirect.js` 通过 `turbo:before-visit` / `turbo:load` 处理提交后的同页跳转；`open_exercise_in_editor.js` 也监听 Turbo 生命周期及 DOM 变化。LeetCode 切题后的 Monaco 延迟挂载由 `tests/local-routing.test.js` 覆盖。新增或修改导航行为时，测试必须区分整页加载与客户端路由，并验证切换后使用的是当前页面/editor 状态。
+Exercism 的 `Back to Exercise` 是具体的 Turbo 导航例子：`return_to_editor_after_submit_redirect.js` 通过 `turbo:before-visit` / `turbo:load` 处理提交后的同页跳转；`open_exercise_in_editor.js` 也监听 Turbo 生命周期及 DOM 变化。LeetCode 切题后的 Monaco 延迟挂载由 `tests/routing/editor-targeting.test.js` 覆盖。新增或修改导航行为时，测试必须区分整页加载与客户端路由，并验证切换后使用的是当前页面/editor 状态。
 
 快捷键动作是两个独立的 action：
 
@@ -151,11 +151,13 @@ send-context  : coding page -> LLM page
 smart-return  : LLM page -> source coding page
 ```
 
+快捷键桥接脚本注入所有 HTTP(S) 页面，以支持其它页面的 raw-source fallback；popup 按钮仍可通过 `activeTab` 在当前页触发相同的后台 workflow。全站快捷键需要 `*://*/*` host permission；Chrome 内部页和扩展页面不支持注入。
+
 在 coding page 按下 `send-context` 时，若页面有非空鼠标选区，只发送选区原文并跳过整页 context 提取；没有选区时保持原有整页题目 context 发送流程。`smart-return` 不读取选区。
 
-默认均为 `Alt+Q`，配置保存在 `codingSite2LlmShortcuts`。动作名是业务契约，按键只是可替换的输入绑定。
+默认均为 `Alt+Q` 和 `Mouse5`，配置保存在 `codingSite2LlmShortcuts`。动作名是业务契约，按键只是可替换的输入绑定。工具栏图标默认主题为 Warm Ivory (`warm-ivory`)。
 
-每个 action 最多有两个独立输入绑定；Options 默认显示一个，点击 Add 后才显示第二个。存储值为至多两个字符串组成的数组；读取旧版单字符串时迁移为单元素数组。键盘组合和鼠标侧键 `Mouse4` / `Mouse5` 都是有效绑定。
+每个 action 最多有两个独立输入绑定；Options 默认显示 `Alt+Q` 和 `Mouse5`，移除其中一个后可点击 Add 添加第二个自定义绑定。存储值为至多两个字符串组成的数组；读取旧版单字符串时迁移为单元素数组。键盘组合和鼠标侧键 `Mouse4` / `Mouse5` 都是有效绑定。
 
 快捷键等设计必须符合人体工学：一次按键组合在用户释放前只能触发一次。页面侧用 `event.repeat` 和 held 状态拦截长按重复事件；Service Worker 收到 `keyup` 的释放消息后立即解锁，超时只作为释放消息丢失时的异常兜底，不能被当作正常的快捷键间隔。兜底时间应明显长于普通人的按住时长，避免用户仍在按键时再次触发工作流。
 
@@ -244,9 +246,9 @@ Run Tests（按钮可用时）
 - `.lhs-footer .run-tests-btn button`
 - `.lhs-footer .submit-btn button`
 
-`continue_after_exercism_modals.js` 只检查可见 dialog 中的按钮，支持 `Continue` 与 `Continue without waiting`；除 dialog 子节点变化外，还监听 `disabled` 和 `aria-disabled` 属性变化，以便按钮一变为可用就继续。`tests/fast-core-feature.test.js` 覆盖延迟启用到关闭 dialog 的状态转换。
+`continue_after_exercism_modals.js` 只检查可见 dialog 中的按钮，支持 `Continue` 与 `Continue without waiting`；除 dialog 子节点变化外，还监听 `disabled` 和 `aria-disabled` 属性变化，以便按钮一变为可用就继续。`tests/exercism/edit/continue-dialogs.test.js` 覆盖延迟启用到关闭 dialog 的状态转换。
 
-自动完成链必须区分 iteration passed 与 exercise completed。`Exercise Solved` 只表示提交的 iteration 通过，不能单独作为完成成功信号；完成链只在 overview 状态为 `completed` 或出现可见的完成结果对话框后返回成功。`tests/local-routing.test.js` 覆盖条件按钮出现 → 发起完成请求 → 确认弹窗 → 完成结果输出，并断言结果出现前不刷新 track concepts。
+自动完成链必须区分 iteration passed 与 exercise completed。`Exercise Solved` 只表示提交的 iteration 通过，不能单独作为完成成功信号；完成链只在 overview 状态为 `completed` 或出现可见的完成结果对话框后返回成功。`tests/exercism/overview/auto-mark-complete.test.js` 覆盖条件按钮出现 → 发起完成请求 → 确认弹窗 → 完成结果输出，并断言结果出现前不刷新 track concepts。
 
 **【待真实流程验证】** 最新 Run Tests 通过并完成 Submit 后，Exercism 会发起同题 overview 的 Turbo 导航。`return_to_editor_after_submit_redirect.js` 从 `Back to Exercise` 链接读取实际 `href`，通知 Service Worker 在未聚焦的新窗口打开同题 overview，同时把原标签留在 `/edit`，避免新增标签挤占当前窗口。Service Worker 只接受同源、同题 URL；`exercismAutoMarkComplete` 关闭时不创建 overview 窗口。overview 的 `auto_mark_exercise_complete.js` 负责发现 `Mark as complete` 并运行完成确认链；确认成功及概念页刷新完成后，Service Worker 自动关闭 overview 标签及其窗口。代码和路由测试已覆盖未聚焦新窗口；真实浏览器中的提交流程与关闭行为仍待验证。
 

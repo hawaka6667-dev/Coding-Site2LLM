@@ -63,8 +63,7 @@ Coding-Site2LLM/
 │       │   ├── leetcode_adapter.ts
 │       │   └── source_fallback_adapter.ts
 │       ├── exercism/
-│       │   ├── concepts_and_exercises/
-│       │   │   └── preserve_track_list_scroll_position.js
+│       │   ├── preserve_track_list_scroll_position.js
 │       │   ├── edit/
 │       │   │   ├── auto_submit_after_manual_run.js
 │       │   │   ├── content.js
@@ -85,12 +84,33 @@ Coding-Site2LLM/
 │       └── runtime_types.d.ts
 ├── tests/
 │   ├── dev-check.ps1
-│   ├── fast-core-feature.test.js
+│   ├── exercism/
+│   │   ├── edit/
+│   │   │   ├── continue-dialogs.test.js
+│   │   │   ├── manual-run-submit.test.js
+│   │   │   ├── submit-redirect.test.js
+│   │   │   └── test-and-submit-worker.test.js
+│   │   ├── overview/
+│   │   │   ├── auto-mark-complete.test.js
+│   │   │   ├── dismiss-closable-dialogs.test.js
+│   │   │   └── open-exercise-in-editor.test.js
+│   │   ├── submission-workflow.test.js
+│   │   └── track-list-scroll.test.js
 │   ├── global-extension-contract.test.js
-│   ├── local-routing.test.js
+│   ├── worker-test-harness.js
 │   ├── popup-daily-practice.test.js
+│   ├── routing/
+│   │   ├── coding-tab-selection.test.js
+│   │   ├── editor-targeting.test.js
+│   │   ├── llm-provider-selection.test.js
+│   │   └── site-adapters.test.js
 │   ├── session-end.ps1
-│   └── version-contract.test.js
+│   ├── version-contract.test.js
+│   └── worker/
+│       ├── context-extraction.test.js
+│       ├── keyboard-shortcuts.test.js
+│       ├── return-routing.test.js
+│       └── smart-return-workflow.test.js
 ├── .gitattributes
 ├── .gitignore
 ├── ARCHITECTURE.md

@@ -8,7 +8,7 @@ const ICON_THEME_PATHS = Object.freeze({
     mint: "icons/icon-theme-mint",
     lemon: "icons/icon-theme-lemon"
 });
-const DEFAULT_ICON_THEME = "ice-cyan";
+const DEFAULT_ICON_THEME = "warm-ivory";
 
 if (typeof chrome === "undefined" || !chrome.storage?.local || !chrome.action?.setIcon) {
     // Unit-test sandboxes load the service worker without extension APIs.

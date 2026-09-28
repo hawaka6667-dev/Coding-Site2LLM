@@ -1,5 +1,5 @@
 /* @machine
-file: worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js
+file: worker/exercism/preserve_track_list_scroll_position.js
 role: preserve Exercism track-list scroll position across reloads
 scope: Exercism track concepts and exercises list pages only
 */

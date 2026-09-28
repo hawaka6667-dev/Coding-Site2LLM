@@ -21,6 +21,33 @@ function listFiles(directory) {
     });
 }
 
+function assertLocalHtmlResourcesExist(htmlFile) {
+    const html = fs.readFileSync(htmlFile, "utf8");
+    const references = html.matchAll(/\b(?:src|href)\s*=\s*(["'])(.*?)\1/gi);
+
+    for (const [, , reference] of references) {
+        if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(reference)) {
+            continue;
+        }
+
+        const resourcePath = decodeURIComponent(reference.split(/[?#]/, 1)[0]);
+        const resolvedPath = reference.startsWith("/")
+            ? path.resolve(ROOT_DIR, `.${resourcePath}`)
+            : path.resolve(path.dirname(htmlFile), resourcePath);
+        const relativePath = path.relative(ROOT_DIR, resolvedPath);
+
+        assert.ok(
+            relativePath !== ".." && !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath),
+            `HTML resource escapes extension package: ${reference} in ${path.relative(ROOT_DIR, htmlFile)}`
+        );
+        assert.equal(
+            fs.existsSync(resolvedPath),
+            true,
+            `Missing HTML resource: ${reference} in ${path.relative(ROOT_DIR, htmlFile)}`
+        );
+    }
+}
+
 function readManifest() {
     assert.equal(fs.existsSync(path.join(SOURCE_ROOT, "icons", "icon-preview.html")), true);
     assert.equal(fs.existsSync(path.join(PROJECT_ROOT, ".build", "build-extension.js")), true);
@@ -28,6 +55,17 @@ function readManifest() {
     assert.equal(fs.existsSync(path.join(PROJECT_ROOT, "tools")), false);
     return JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "manifest.json"), "utf8"));
 }
+
+test("defaults the toolbar icon theme to Warm Ivory", () => {
+    const options = fs.readFileSync(path.join(SOURCE_ROOT, "options", "options.js"), "utf8");
+    const iconThemeWorker = fs.readFileSync(
+        path.join(SOURCE_ROOT, "worker", "manage_icon_theme.ts"),
+        "utf8"
+    );
+
+    assert.match(options, /iconTheme: "warm-ivory"/);
+    assert.match(iconThemeWorker, /DEFAULT_ICON_THEME = "warm-ivory"/);
+});
 
 test("keeps the extension runtime isolated from repository tooling", () => {
     const manifest = readManifest();
@@ -44,6 +82,27 @@ test("keeps the extension runtime isolated from repository tooling", () => {
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "icons", "icon-preview.html")), false);
     for (const file of runtimeFiles) {
         assert.equal(fs.existsSync(path.join(ROOT_DIR, file)), true, `Missing extension file: ${file}`);
+    }
+});
+
+test("injects the shortcut bridge on HTTP(S) pages exactly once", () => {
+    const manifest = readManifest();
+    const shortcutScripts = manifest.content_scripts.filter(script =>
+        script.js.includes("worker/keyboard_shortcuts.js")
+    );
+
+    assert.equal(shortcutScripts.length, 1);
+    assert.ok(shortcutScripts[0].matches.includes("*://*/*"));
+    assert.ok(manifest.host_permissions.includes("*://*/*"));
+    assert.ok(!shortcutScripts[0].js.includes("worker/llm_copy_tracker.js"));
+});
+
+test("keeps local resources referenced by extension HTML in the package", () => {
+    const htmlFiles = listFiles(ROOT_DIR).filter(file => file.endsWith(".html"));
+
+    assert.ok(htmlFiles.length > 0);
+    for (const htmlFile of htmlFiles) {
+        assertLocalHtmlResourcesExist(htmlFile);
     }
 });
 
@@ -225,8 +284,13 @@ test("keeps daily-practice destinations in an extensible popup provider list", (
         },
         {
             id: "exercism-tracks",
-            label: "Exercism language Track",
+            label: "Exercism pl Track",
             url: "https://exercism.org/tracks"
+        },
+        {
+            id: "regexone",
+            label: "RegexOne",
+            url: "https://regexone.com/"
         }
     ]);
 });
@@ -361,7 +425,7 @@ test("continues past Exercism's automated-feedback check without waiting", () =>
 test("registers shared list scroll restoration on Exercism track list pages", () => {
     const trackListScript = readManifest().content_scripts.find(script =>
         script.js.includes(
-            "worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js"
+            "worker/exercism/preserve_track_list_scroll_position.js"
         )
     );
 

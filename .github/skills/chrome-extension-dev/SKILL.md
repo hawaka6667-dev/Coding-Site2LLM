@@ -11,7 +11,7 @@ description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome ext
 
 ## 工作流程
 
-1. list_pages不了就restart mcp
+1. list_pages不了就restart mcp，不得出现不停用其他命令死循环不解决问题的情况出现
 3. **使用 Chrome MCP 观察真实状态**：用 `list_pages` 找目标标签页；用 `take_snapshot` 查看可访问页面结构；必要时用 `evaluate_script` 检查 URL、DOM、editor 和页面状态。只对本次改动涉及的页面操作，不猜测 selector 或状态。
 	- 工具必须按目的选择：列出当前浏览器标签页时，直接调用 `mcp_chrome_devtoo_list_pages`；检查页面结构和运行态时，调用 `mcp_chrome_devtoo_take_snapshot` 或 `mcp_chrome_devtoo_evaluate_script`。不要把 `mcp_chrome_devtoo_lighthouse_audit` 当作连接检查或 `list_pages` 的替代品；它只用于明确要求的 Lighthouse 审计，并且需要已有的有效 `pageId`。
 	- `list_pages` 是 Chrome DevTools MCP 工具，不是 PowerShell/terminal 命令；对用户现有标签页测试时，不要另开 VS Code 集成浏览器替代它。

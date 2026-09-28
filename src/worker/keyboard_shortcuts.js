@@ -5,8 +5,8 @@ contract: shortcuts are stored by Options and forwarded to the service worker
 */
 
 const DEFAULT_SHORTCUTS = Object.freeze({
-    "send-context": "Alt+Q",
-    "smart-return": "Alt+Q"
+    "send-context": ["Alt+Q", "Mouse5"],
+    "smart-return": ["Alt+Q", "Mouse5"]
 });
 const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
 const LLM_HOSTS = new Set([

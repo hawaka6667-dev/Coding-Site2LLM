@@ -3,11 +3,11 @@ const DEFAULT_SETTINGS = Object.freeze({
     exercismAutoSubmitAfterManualRun: true,
     exercismAutoMarkComplete: true,
     exercismRefreshConceptsAfterComplete: true,
-    iconTheme: "ice-cyan"
+    iconTheme: "warm-ivory"
 });
 const DEFAULT_SHORTCUTS = Object.freeze({
-    "send-context": ["Alt+Q"],
-    "smart-return": ["Alt+Q"]
+    "send-context": ["Alt+Q", "Mouse5"],
+    "smart-return": ["Alt+Q", "Mouse5"]
 });
 const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
 const ICON_THEMES = ["ice-cyan", "warm-ivory", "mint", "lemon"];

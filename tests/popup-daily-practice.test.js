@@ -103,13 +103,13 @@ test("adds a custom URL with a detected label, then removes it", async () => {
     );
     assert.equal(savedProviders[0].label, "AtCoder");
     assert.equal(savedProviders[0].url, "https://www.atcoder.jp/contests/abc");
-    assert.equal(elements.get("daily-practice-links").children.length, 5);
+    assert.equal(elements.get("daily-practice-links").children.length, 6);
 
-    const customItem = elements.get("daily-practice-links").children[4];
+    const customItem = elements.get("daily-practice-links").children[5];
     await customItem.children[1].dispatch("click");
 
     assert.equal(storedValues.dailyPracticeCustomProviders.length, 0);
-    assert.equal(elements.get("daily-practice-links").children.length, 4);
+    assert.equal(elements.get("daily-practice-links").children.length, 5);
 });
 
 test("opens destinations individually and with the Open all control", async () => {
@@ -123,10 +123,11 @@ test("opens destinations individually and with the Open all control", async () =
     }
     await elements.get("daily-practice-open-all").dispatch("click");
 
-    assert.equal(openedTabs.length, 10);
+    assert.equal(openedTabs.length, 12);
     assert.ok(openedTabs.some(tab => tab.url === "https://example.org/daily"));
     assert.ok(openedTabs.some(tab => tab.url.startsWith("https://leetcode.com/")));
     assert.ok(openedTabs.some(tab => tab.url === "https://www.codewars.com/dashboard"));
+    assert.ok(openedTabs.some(tab => tab.url === "https://regexone.com/"));
 });
 
 test("rejects non-web URLs", async () => {

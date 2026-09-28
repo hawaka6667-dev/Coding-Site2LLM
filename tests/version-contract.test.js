@@ -25,10 +25,14 @@ test("uses the version policy documented in helper.md", () => {
     const builder = fs.readFileSync(path.join(ROOT_DIR, ".build", "build-extension.js"), "utf8");
     const packager = fs.readFileSync(path.join(ROOT_DIR, ".build", "package.ps1"), "utf8");
 
-    assert.match(helper, /Documentation-only changes, tests, and bug fixes do not increment the version/);
-    assert.match(helper, /new features increment the patch version by `0\.01`/);
+    assert.match(helper, /Every delivered change increments the four-part extension version/);
+    assert.match(helper, /four-part extension version `major\.minor\.batch\.change`/);
+    assert.match(helper, /increments the final segment by `0\.0\.0\.1`/);
+    assert.match(helper, /increments the batch segment by `0\.0\.1`/);
+    assert.match(helper, /increment the minor segment by `0\.1\.0\.0`/);
+    assert.match(helper, /increment the major segment by `1\.0\.0\.0`/);
     assert.match(helper, /Git tags and GitHub Releases retain the release history/);
-    assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+    assert.match(manifest.version, /^\d+\.\d+\.\d+\.\d+$/);
     assert.equal(
         packageJson.scripts["package:crx"],
         "powershell -ExecutionPolicy Bypass -File .build/package.ps1"
@@ -61,13 +65,21 @@ test("current feature release advances beyond the previous release tag", () => {
     const previousRelease = latestTag.replace(/^v/, "");
     const current = manifest.version.split(".").map(Number);
     const previous = previousRelease.split(".").map(Number);
+    while (previous.length < current.length) {
+        previous.push(0);
+    }
+    const advances = current.some((part, index) => {
+        const previousPart = previous[index] || 0;
+        if (part !== previousPart) {
+            return part > previousPart && current
+                .slice(0, index)
+                .every((prefix, prefixIndex) => prefix === previous[prefixIndex]);
+        }
+        return false;
+    });
 
     assert.ok(
-        current[0] > previous[0] ||
-        (current[0] === previous[0] && current[1] > previous[1]) ||
-        (current[0] === previous[0] &&
-            current[1] === previous[1] &&
-            current[2] > previous[2]),
+        advances,
         `manifest version ${manifest.version} must advance beyond v${previousRelease}`
     );
 });

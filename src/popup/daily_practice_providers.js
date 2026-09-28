@@ -28,9 +28,16 @@ const DAILY_PRACTICE_PROVIDERS = [
     },
     {
         id: "exercism-tracks",
-        label: "Exercism language Track",
+        label: "Exercism pl Track",
         getUrl() {
             return "https://exercism.org/tracks";
+        }
+    },
+    {
+        id: "regexone",
+        label: "RegexOne",
+        getUrl() {
+            return "https://regexone.com/";
         }
     }
 ];

@@ -1,0 +1,222 @@
+/* @machine
+file: tests/worker/smart-return-workflow.test.js
+role: verify Smart Return copy, return, and code-write lifecycle
+run: npm run test:unit
+*/
+
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const vm = require("node:vm");
+const { loadCoreWorker } = require("../worker-test-harness.js");
+
+test("returns without replacing code when no LLM copy happened", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    const updates = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    context.chrome.scripting.executeScript = async ({ func }) => [{
+        result: func.toString().includes("navigator.clipboard") ? "" : true
+    }];
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism' } }",
+        context
+    );
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1 })",
+        context
+    );
+
+    assert.equal(
+        JSON.stringify(updates),
+        JSON.stringify([[10, { active: true }]])
+    );
+});
+
+test("persists the default Alt+Q return route in durable extension storage", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push({
+        id: 20,
+        windowId: 1,
+        index: 1,
+        active: true,
+        url: "https://chat.deepseek.com/"
+    });
+    const stored = {};
+    context.chrome.storage = {
+        local: {
+            set: async value => Object.assign(stored, value),
+            get: async key => Array.isArray(key)
+                ? Object.fromEntries(key.map(name => [name, stored[name]]))
+                : { [key]: stored[key] }
+        },
+        session: {
+            set: async () => {},
+            get: async () => ({})
+        }
+    };
+    await vm.runInContext(
+        "saveReturnRoute({ windowId: 1, sourceTabId: 10, llmTabId: 20 })",
+        context
+    );
+    context.returnRoutes = null;
+
+    const route = await vm.runInContext("loadReturnRoute()", context);
+
+    assert.equal(route.windowId, 1);
+    assert.equal(route.sourceTabId, 10);
+    assert.equal(route.llmTabId, 20);
+});
+
+test("returns and replaces code after an LLM copy event", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    const updates = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    context.chrome.scripting.executeScript = async ({ func }) => [{
+        result: func.toString().includes("navigator.clipboard") ? "fixed code" : true
+    }];
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism', copied: true, copiedText: 'fixed code' } }",
+        context
+    );
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1 })",
+        context
+    );
+
+    assert.equal(
+        JSON.stringify(updates),
+        JSON.stringify([[10, { active: true }]])
+    );
+});
+
+test("clears consumed LLM copy when Smart Return submission fails", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    context.chrome.tabs.update = async () => {};
+    context.chrome.scripting.executeScript = async ({ func }) => {
+        const source = func.toString();
+
+        if (source.includes("navigator.clipboard")) {
+            return [{ result: "fixed code" }];
+        }
+
+        if (source.includes("KeyboardEvent")) {
+            throw new Error("submission failed");
+        }
+
+        return [{ result: true }];
+    };
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism', copied: true, copiedText: 'fixed code' } }",
+        context
+    );
+
+    await assert.rejects(
+        vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context),
+        /submission failed/
+    );
+
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copied", context), false);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copiedText", context), "");
+});
+
+test("returns and replaces likely code when the LLM copy button emits no copy event", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    const updates = [];
+    const executed = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    context.chrome.scripting.executeScript = async ({ func }) => {
+        executed.push(func.toString());
+        return [{
+            result: func.toString().includes("navigator.clipboard")
+                ? "const fixedCode = true;"
+                : true
+        }];
+    };
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism' } }",
+        context
+    );
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1 })",
+        context
+    );
+
+    assert.equal(
+        JSON.stringify(updates),
+        JSON.stringify([[10, { active: true }]])
+    );
+    assert.equal(executed.length, 3);
+});
+
+test("Smart Return writes to the Codewars solution editor and attempts the full suite", async () => {
+    const context = loadCoreWorker();
+    const solution = {
+        value: "starter code",
+        setValue(value) { this.value = value; },
+        getValue() { return this.value; },
+        focus() { this.focused = true; }
+    };
+    let attemptCount = 0;
+    const attemptButton = {
+        offsetWidth: 80,
+        offsetHeight: 30,
+        click() { attemptCount += 1; }
+    };
+    context.document = {
+        querySelector(selector) {
+            if (selector === "#code .js-editor .CodeMirror") {
+                return { CodeMirror: solution };
+            }
+            if (selector === "#attempt_btn") {
+                return attemptButton;
+            }
+            return null;
+        }
+    };
+    context.executePage = async (_tabId, pageFunction, args = []) =>
+        pageFunction(...args);
+    context.readClipboard = async () => "public class XO { /* fixed */ }";
+    context.chrome.tabs.get = async () => ({
+        id: 10,
+        url: "https://www.codewars.com/kata/55908aad6620c066bc00002a/train/java"
+    });
+    context.chrome.tabs.update = async () => {};
+    context.tabState.push(
+        {
+            id: 10,
+            windowId: 1,
+            index: 0,
+            url: "https://www.codewars.com/kata/55908aad6620c066bc00002a/train/java"
+        },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Codewars', copied: true, copiedText: 'public class XO { /* fixed */ }' } }",
+        context
+    );
+
+    await vm.runInContext("returnToCodingPage({ id: 20, windowId: 1 })", context);
+
+    assert.equal(solution.value, "public class XO { /* fixed */ }");
+    assert.equal(solution.focused, true);
+    assert.equal(attemptCount, 1);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copied", context), false);
+});
