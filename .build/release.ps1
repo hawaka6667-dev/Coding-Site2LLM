@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
-$manifest = Get-Content -Raw "manifest.json" | ConvertFrom-Json
+$manifest = Get-Content -Raw (Join-Path $projectRoot "extension/manifest.json") | ConvertFrom-Json
 $version = $manifest.version
 $tag = "v$version"
 $artifactDirectory = $PSScriptRoot

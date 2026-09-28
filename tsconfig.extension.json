@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleDetection": "legacy",
+    "lib": ["ES2022", "DOM"],
+    "types": ["chrome"],
+    "noImplicitAny": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "rootDir": "extension",
+    "noEmitOnError": true
+  },
+  "include": ["extension/background.ts", "extension/worker/**/*.ts", "extension/worker/**/*.d.ts"]
+}

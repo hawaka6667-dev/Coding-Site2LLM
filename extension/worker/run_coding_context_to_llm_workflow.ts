@@ -4,11 +4,11 @@ role: coordinate end-to-end workflow and Chrome listeners
 contract: no website selectors or page-specific extraction
 */
 
-let workflowPromise = null;
-let returnRoutes = null;
+let workflowPromise: Promise<void> | null = null;
+let returnRoutes: Record<string, CodingSiteReturnRoute> | null = null;
 let keyboardShortcutHeld = false;
 let keyboardShortcutHeldReleaseToken = "";
-let keyboardShortcutReleaseTimer = null;
+let keyboardShortcutReleaseTimer: ReturnType<typeof setTimeout> | null = null;
 const exercismSubmitPromises = new Map();
 const RETURN_ROUTE_KEY = "codingSite2LlmReturnRoute";
 const RETURN_ROUTES_KEY = "codingSite2LlmReturnRoutes";
@@ -22,21 +22,21 @@ async function getSelectedLlmProvider() {
     ) || LLM_PROVIDERS[0];
 }
 
-async function saveReturnRoute(route) {
+async function saveReturnRoute(route: CodingSiteReturnRoute) {
     const routes = await loadReturnRoutes();
     const key = getReturnRouteKey(route.windowId, route.llmTabId);
     routes[key] = route;
     await persistReturnRoutes(routes);
 }
 
-async function persistReturnRoutes(routes) {
+async function persistReturnRoutes(routes: Record<string, CodingSiteReturnRoute>) {
     returnRoutes = routes;
     const value = { [RETURN_ROUTES_KEY]: routes };
     await chrome.storage?.local?.set?.(value);
     await chrome.storage?.session?.set?.(value);
 }
 
-async function clearReturnRoute(routeKey) {
+async function clearReturnRoute(routeKey: string) {
     const routes = await loadReturnRoutes();
 
     if (!Object.hasOwn(routes, routeKey)) {
@@ -57,33 +57,41 @@ async function loadReturnRoute() {
         : null;
 }
 
-function getReturnRouteKey(windowId, llmTabId) {
+function getReturnRouteKey(windowId: number, llmTabId: number) {
     return `${windowId}:${llmTabId}`;
 }
 
-function normalizeReturnRoute(route) {
+function normalizeReturnRoute(route: unknown): CodingSiteReturnRoute | null {
     if (!route || typeof route !== "object") {
         return null;
     }
 
-    let sourcePlatform = route.sourcePlatform;
+    const savedRoute = route as Partial<CodingSiteReturnRoute>;
 
-    if (!sourcePlatform && route.sourceUrl) {
+    if (savedRoute.windowId === undefined || savedRoute.llmTabId === undefined) {
+        return null;
+    }
+
+    let sourcePlatform = savedRoute.sourcePlatform;
+
+    if (!sourcePlatform && savedRoute.sourceUrl) {
         try {
-            sourcePlatform = getPlatform(route.sourceUrl).name;
+            sourcePlatform = getPlatform(savedRoute.sourceUrl).name;
         } catch (_) {
             sourcePlatform = "";
         }
     }
 
     return {
-        ...route,
+        ...savedRoute,
+        windowId: savedRoute.windowId,
+        llmTabId: savedRoute.llmTabId,
         sourcePlatform: sourcePlatform || "",
-        sourceIdentity: route.sourceIdentity || getCodingPageIdentity(
-            route.sourceUrl,
+        sourceIdentity: savedRoute.sourceIdentity || getCodingPageIdentity(
+            savedRoute.sourceUrl,
             sourcePlatform || ""
         ),
-        status: route.status || (route.sourceTabId ? "routed" : "orphaned")
+        status: savedRoute.status || (savedRoute.sourceTabId ? "routed" : "orphaned")
     };
 }
 
@@ -122,11 +130,11 @@ async function loadReturnRoutes() {
     return returnRoutes;
 }
 
-function isLlmUrl(url) {
+function isLlmUrl(url: string | undefined) {
     return LLM_PROVIDERS.some(provider => provider.match(url || ""));
 }
 
-async function readClipboard(tabId) {
+async function readClipboard(tabId: number) {
     return executePage(tabId, async () => {
         try {
             return (await navigator.clipboard.readText()).trim();
@@ -136,7 +144,7 @@ async function readClipboard(tabId) {
     });
 }
 
-function isLikelyCode(text) {
+function isLikelyCode(text: string) {
     const value = String(text || "").trim();
 
     if (!value || value.length < 3 || value.length > 100000) {
@@ -146,7 +154,7 @@ function isLikelyCode(text) {
     return /(?:[{};]|=>|\b(?:const|let|var|function|return|class|def|import|from|public|private|if|for|while)\b|<!--[\s\S]*-->|^\s*#include\b)/m.test(value);
 }
 
-async function recordLlmCopy(tabId, text) {
+async function recordLlmCopy(tabId: number, text: string) {
     const tabs = await chrome.tabs.query({});
     const llmTab = tabs.find(tab => tab.id === tabId && isLlmUrl(tab.url));
     const route = llmTab
@@ -168,7 +176,7 @@ async function recordLlmCopy(tabId, text) {
     });
 }
 
-async function replaceCode(tabId, text) {
+async function replaceCode(tabId: number, text: string) {
     const sourceTab = await chrome.tabs.get?.(tabId);
     const platform = sourceTab?.url ? getPlatform(sourceTab.url) : null;
 
@@ -226,7 +234,7 @@ async function replaceCode(tabId, text) {
     }
 }
 
-async function submitCode(tabId) {
+async function submitCode(tabId: number) {
     await executePage(tabId, () => {
         const target = document.activeElement || document;
 
@@ -242,7 +250,7 @@ async function submitCode(tabId) {
     });
 }
 
-async function submitReturnedCode(tabId) {
+async function submitReturnedCode(tabId: number) {
     const sourceTab = await chrome.tabs.get?.(tabId);
     const platform = sourceTab?.url ? getPlatform(sourceTab.url) : null;
 
@@ -254,7 +262,7 @@ async function submitReturnedCode(tabId) {
     await submitCode(tabId);
 }
 
-async function returnToCodingPage(llmTab) {
+async function returnToCodingPage(llmTab: chrome.tabs.Tab) {
     const routes = await loadReturnRoutes();
     const routeKey = getReturnRouteKey(llmTab.windowId, llmTab.id);
     let route = routes[routeKey];
@@ -337,7 +345,7 @@ async function returnToCodingPage(llmTab) {
     }
 }
 
-function isCodingTabForPlatform(tab, sourcePlatform) {
+function isCodingTabForPlatform(tab: chrome.tabs.Tab, sourcePlatform: string) {
     if (!tab?.id || !tab.url || sourcePlatform === "Web source") {
         return false;
     }
@@ -357,7 +365,12 @@ function isCodingTabForPlatform(tab, sourcePlatform) {
     }
 }
 
-function findRightCodingTab(tabs, llmTab, sourcePlatform, preferredIdentity = "") {
+function findRightCodingTab(
+    tabs: chrome.tabs.Tab[],
+    llmTab: chrome.tabs.Tab,
+    sourcePlatform: string,
+    preferredIdentity = ""
+) {
     const candidates = tabs
         .filter(tab => typeof tab.index === "number" && tab.index > llmTab.index)
         .filter(tab => isCodingTabForPlatform(tab, sourcePlatform))
@@ -390,7 +403,7 @@ async function runWorkflow(selectedText = "") {
 async function runWorkflowOnce(selectedText = "") {
     const totalStart = performance.now();
 
-    function mark(label, start) {
+    function mark(label: string, start: number) {
         console.log(
             `[profiler] ${label}:`,
             Math.round(performance.now() - start),
@@ -474,7 +487,10 @@ async function runWorkflowOnce(selectedText = "") {
     );
 }
 
-async function runExercismTestSubmit(tabId, options) {
+async function runExercismTestSubmit(
+    tabId?: number,
+    options: { skipRun?: boolean } = {}
+) {
     const currentTab = tabId
         ? await chrome.tabs.get(tabId)
         : (await chrome.tabs.query({
@@ -510,7 +526,10 @@ async function runExercismTestSubmit(tabId, options) {
     }
 }
 
-async function openSubmittedExercismOverview(senderTab, overviewUrl) {
+async function openSubmittedExercismOverview(
+    senderTab: chrome.tabs.Tab,
+    overviewUrl: string
+) {
     if (!senderTab?.id || typeof senderTab.url !== "string") {
         return false;
     }
@@ -556,7 +575,7 @@ chrome.action.onClicked.addListener(async () => {
     }
 });
 
-function invalidateReturnRoutesForSourceUrlChange(tabId, url) {
+function invalidateReturnRoutesForSourceUrlChange(tabId: number, url: string) {
     if (!Number.isInteger(tabId) || typeof url !== "string") {
         return;
     }
@@ -649,7 +668,7 @@ chrome.tabs.onRemoved?.addListener((tabId, removeInfo) => {
         });
 });
 
-function getExercismConceptsPath(exerciseUrl) {
+function getExercismConceptsPath(exerciseUrl: string) {
     try {
         const parsedUrl = new URL(exerciseUrl);
         const match = parsedUrl.pathname.match(
@@ -664,7 +683,7 @@ function getExercismConceptsPath(exerciseUrl) {
     }
 }
 
-async function reloadExercismConceptsForExercise(exerciseUrl) {
+async function reloadExercismConceptsForExercise(exerciseUrl: string) {
     const conceptsPath = getExercismConceptsPath(exerciseUrl);
     if (!conceptsPath) {
         return false;
@@ -690,7 +709,7 @@ async function reloadExercismConceptsForExercise(exerciseUrl) {
     return matchingTabs.length > 0;
 }
 
-async function markCompleteAndRefreshConcepts(tabId, exerciseUrl) {
+async function markCompleteAndRefreshConcepts(tabId: number, exerciseUrl: string) {
     const platform = getPlatform(exerciseUrl);
     if (typeof platform.markComplete !== "function") {
         return false;

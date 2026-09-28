@@ -6,6 +6,7 @@
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+$extensionRoot = Join-Path $root "extension"
 
 function Fail-Check([string]$reason) {
     Write-Host "FAIL: $reason" -ForegroundColor Red
@@ -26,12 +27,13 @@ Write-Host "Coding Site2LLM development preflight"
 
 try {
     $packageJson = Get-Content -LiteralPath (Join-Path $root "package.json") -Raw | ConvertFrom-Json
-    $manifest = Get-Content -LiteralPath (Join-Path $root "manifest.json") -Raw | ConvertFrom-Json
+    $manifest = Get-Content -LiteralPath (Join-Path $extensionRoot "manifest.json") -Raw | ConvertFrom-Json
 } catch {
-    Fail-Check "package.json or manifest.json is missing or invalid: $($_.Exception.Message)"
+    Fail-Check "package.json or extension/manifest.json is missing or invalid: $($_.Exception.Message)"
 }
 
-$requiredFiles = @(
+$extensionFiles = @(
+    "manifest.json",
     "background.js",
     "worker/exercism/edit/content.js",
     "popup/popup.html",
@@ -43,13 +45,20 @@ $requiredFiles = @(
     "worker/configure_supported_coding_sites_and_llm_providers.js",
     "worker/exercism/overview/open_exercise_in_editor.js",
     "worker/exercism/overview/auto_mark_exercise_complete.js",
-    "worker/exercism/edit/auto_submit_after_manual_run.js",
+    "worker/exercism/edit/auto_submit_after_manual_run.js"
+)
+$repositoryFiles = @(
     "tests/dev-check.ps1",
     "tests/session-end.ps1",
     "tests/version-contract.test.js"
 )
 
-foreach ($file in $requiredFiles) {
+foreach ($file in $extensionFiles) {
+    Require-Check (Test-Path -LiteralPath (Join-Path $extensionRoot $file) -PathType Leaf) `
+        "Required extension file is missing: extension/$file"
+}
+
+foreach ($file in $repositoryFiles) {
     Require-Check (Test-Path -LiteralPath (Join-Path $root $file) -PathType Leaf) `
         "Required development file is missing: $file"
 }

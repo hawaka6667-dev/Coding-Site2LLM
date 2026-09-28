@@ -14,6 +14,10 @@
 
 extension 是 context-transport layer，不负责替用户分析、总结或改写题目。
 
+扩展运行文件集中在 `extension/`，此目录是 Chrome unpacked extension 与打包器使用的唯一根目录。仓库根保留测试、构建脚本、文档和开发资料；不要把测试、预览页或其它开发材料放入 `extension/`。
+
+后台核心源码使用 TypeScript：`background.ts` 和 `worker/**/*.ts` 编译为同目录 classic-script `.js`，由 Manifest V3 service worker 按 `background.ts` 中的 `importScripts()` 顺序加载。修改 TS 后，测试脚本会先自动运行 `npm run build:extension`；手动构建用 `npm run build:extension`，只做类型检查用 `npm run typecheck:extension`。`worker/` 下由 manifest 直接注册的页面 content scripts 仍是独立 JavaScript，不属于这次后台核心迁移。
+
 ### 用户目标优先
 
 所有 UI、input 和 automation design 先回答 target user 要完成什么，再选择 implementation。不得把 browser default behavior、developer habits、framework constraints 或 future feature plans 当作 user goals。目标明确后，依次确定 user workflow、可接受的 input、error recovery、product language policy，最后才选择 native controls、validation 和 localization mechanism。
@@ -22,24 +26,22 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 
 当前支持的 coding sites：Exercism、LeetCode、Codewars，以及其它 HTTP(S) pages 的 raw-source fallback。
 
-当前支持的 LLM providers：DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等。具体 provider configuration 以 `background.js` 为准。
+当前支持的 LLM providers：DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等。具体 provider configuration 以 `extension/background.js` 为准。
 
 ### 日常开发入口
 
 | 要改的 behavior | 先看 | 最小 validation |
 | --- | --- | --- |
-| 要改的 behavior | 先看 | 最小 validation |
-| --- | --- | --- |
-| prompt、site context | `worker/extract_coding_site_context_with_site_adapters.js` | `npm run test:unit` |
-| URL routing 和 site routing | `worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
-| Exercism overview redirect and completion confirmation | `worker/exercism/overview/open_exercise_in_editor.js`, `worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism track-list scroll restoration | `worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism editor bridge and submission | `worker/exercism/edit/content.js`, `worker/extract_coding_site_context_with_site_adapters.js`, `worker/run_coding_context_to_llm_workflow.js`, `worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:routing` |
-| Codewars Smart Return write-back and full-suite attempt | `worker/extract_coding_site_context_with_site_adapters.js`, `worker/run_coding_context_to_llm_workflow.js` | `npm run test:unit` |
-| Exercism Continue dialogs | `worker/exercism/edit/continue_after_exercism_modals.js`, `tests/fast-core-feature.test.js` | `npm run test:unit` |
-| popup daily-practice entry | `popup/daily_practice_providers.js`, `popup/popup.js` | `npm run test:unit` |
-| extension injection 和 manifest | `manifest.json`, `worker/` | `npm run test:contracts` |
-| development environment 和 entry points | `tests/dev-check.ps1`, `package.json`, `manifest.json` | `npm run dev:check` |
+| prompt、site context | `extension/worker/adapters/` | `npm run test:unit` |
+| URL routing 和 site routing | `extension/worker/route_coding_page_and_build_llm_prompt.js` | `npm run test:routing` |
+| Exercism overview redirect and completion confirmation | `extension/worker/exercism/overview/open_exercise_in_editor.js`, `extension/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism track-list scroll restoration | `extension/worker/exercism/concepts_and_exercises/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism editor bridge and submission | `extension/worker/exercism/edit/content.js`, `extension/worker/adapters/exercism_edit_adapter.ts`, `extension/worker/run_coding_context_to_llm_workflow.ts`, `extension/worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:routing` |
+| Codewars Smart Return write-back and full-suite attempt | `extension/worker/adapters/codewars_adapter.ts`, `extension/worker/run_coding_context_to_llm_workflow.ts` | `npm run test:unit` |
+| Exercism Continue dialogs | `extension/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/fast-core-feature.test.js` | `npm run test:unit` |
+| popup daily-practice entry | `extension/popup/daily_practice_providers.js`, `extension/popup/popup.js` | `npm run test:unit` |
+| extension injection 和 manifest | `extension/manifest.json`, `extension/worker/` | `npm run test:contracts` |
+| development environment 和 entry points | `tests/dev-check.ps1`, `package.json`, `extension/manifest.json` | `npm run dev:check` |
 
 `dev:check` 检查 repository entry points、manifest 和 Chrome process。浏览器实时状态直接通过 Chrome DevTools MCP 的 `list_pages` 查看；不需要导出、保存或维护快照文件。
 
@@ -60,7 +62,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 - timeout 用来发现 test 未完成，不等同于证明存在 infinite loop。Synchronous infinite loop 会 block event loop，应使用 external process-level timeout 并检查 CPU usage；pending async Promise 通常表现为 test timeout 或进程仍有 active handles。
 - 断言 VM 等 cross-realm values 时，比较明确 fields，或先转换为 host-realm plain objects，避免 prototype mismatch 造成误报。
 
-Documentation-only changes, tests, and bug fixes do not increment the version. By default, new features increment the patch version by `0.01`; Git tags and GitHub Releases retain the release history.
+Documentation-only changes, tests, and bug fixes do not increment the version. By default, new features increment the patch version by `0.01`; a larger feature or architecture milestone may advance the minor version and reset the patch to `0`. Git tags and GitHub Releases retain the release history.
 
 ### 浏览器探测原则
 
@@ -90,7 +92,7 @@ live page
 
 不做 generic cross-site editor scraper，不在 extension 内生成 solution content，不把 MCP scripts 作为 production runtime dependencies。
 
-popup 的 daily-practice entry 由 `popup/daily_practice_providers.js` 的 provider list 驱动。LeetCode 使用当天 UTC date 构造 Daily Question page；Codewars 直接打开 dashboard。新增 coding site 时只需添加 provider configuration，并扩展对应的 contract test。
+popup 的 daily-practice entry 由 `extension/popup/daily_practice_providers.js` 的 provider list 驱动。LeetCode 使用当天 UTC date 构造 Daily Question page；Codewars 直接打开 dashboard。新增 coding site 时只需添加 provider configuration，并扩展对应的 contract test。
 
 ### Popup 输入与语言规范
 
@@ -176,7 +178,7 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 
 | 模块 | 只负责 | 不负责 |
 | --- | --- | --- |
-| `extract_coding_site_context_with_site_adapters.js` | adapter、页面提取、过滤、prompt 数据、站点专属编辑器回写和测试提交 | 跨页面导航策略 |
+| `worker/adapters/*_adapter.ts` | 每个站点独立负责页面提取、过滤、编辑器回写和站点内测试提交 | 其它站点 selector、跨页面导航策略 |
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
 | `find_llm_tab_and_insert_prompt.js` | 找到指定 provider 并插入 prompt | 站点状态判断 |
 | `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由；已确认的 Exercism 提交可在自动完成开启时后台打开同题 overview | 站点专属 selector |

@@ -8,7 +8,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$manifest = Get-Content -Raw -Path (Join-Path $projectRoot "manifest.json") | ConvertFrom-Json
+$extensionSource = Join-Path $projectRoot "extension"
+$manifest = Get-Content -Raw -Path (Join-Path $extensionSource "manifest.json") | ConvertFrom-Json
 $version = $manifest.version
 $keyPath = Join-Path $PSScriptRoot "coding-site2llm.pem"
 $outputDirectory = if ($OutputDirectory) {
@@ -44,7 +45,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $outputDirectory "Co
 
 try {
     foreach ($item in $filesToCopy) {
-        Copy-Item -Recurse -Force (Join-Path $projectRoot $item) $extensionRoot
+        Copy-Item -Recurse -Force (Join-Path $extensionSource $item) $extensionRoot
     }
 
     $chromeArguments = @("--pack-extension=$extensionRoot")

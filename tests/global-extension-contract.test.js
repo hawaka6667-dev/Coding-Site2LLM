@@ -10,11 +10,29 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const ROOT_DIR = path.join(__dirname, "..");
+const ROOT_DIR = path.join(__dirname, "..", "extension");
 
 function readManifest() {
     return JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "manifest.json"), "utf8"));
 }
+
+test("keeps the extension runtime isolated from repository tooling", () => {
+    const manifest = readManifest();
+    const runtimeFiles = [
+        manifest.background.service_worker,
+        manifest.options_ui.page,
+        manifest.action.default_popup,
+        ...Object.values(manifest.icons),
+        ...Object.values(manifest.action.default_icon),
+        ...manifest.content_scripts.flatMap(script => script.js)
+    ];
+
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "../manifest.json")), false);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "icons", "icon-preview.html")), false);
+    for (const file of runtimeFiles) {
+        assert.equal(fs.existsSync(path.join(ROOT_DIR, file)), true, `Missing extension file: ${file}`);
+    }
+});
 
 test("keeps extension commands and content scripts registered", () => {
     const manifest = readManifest();
@@ -215,8 +233,12 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
         path.join(ROOT_DIR, "worker", "exercism", "edit", "content.js"),
         "utf8"
     );
-    const adapterSource = fs.readFileSync(
-        path.join(ROOT_DIR, "worker", "extract_coding_site_context_with_site_adapters.js"),
+    const editAdapterSource = fs.readFileSync(
+        path.join(ROOT_DIR, "worker", "adapters", "exercism_edit_adapter.js"),
+        "utf8"
+    );
+    const overviewAdapterSource = fs.readFileSync(
+        path.join(ROOT_DIR, "worker", "adapters", "exercism_overview_adapter.js"),
         "utf8"
     );
     const markCompleteSource = fs.readFileSync(
@@ -233,13 +255,13 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
         path.join(ROOT_DIR, "worker", "run_coding_context_to_llm_workflow.js"),
         "utf8"
     );
-    const testAndSubmit = adapterSource.slice(
-        adapterSource.indexOf("async testAndSubmit(tabId)"),
-        adapterSource.indexOf("async getContext(tabId)")
+    const testAndSubmit = editAdapterSource.slice(
+        editAdapterSource.indexOf("async testAndSubmit(tabId"),
+        editAdapterSource.indexOf("async getContext(tabId")
     );
 
     assert.match(contentSource, /exercism-test-submit/);
-    assert.match(adapterSource, /completeExercismExercise\(tabId\)/);
+    assert.match(overviewAdapterSource, /completeExercismExercise\(tabId\)/);
     assert.doesNotMatch(testAndSubmit, /markComplete|completeExercismExercise/);
 
     // The overview mark-complete script asks for the chain by message; both

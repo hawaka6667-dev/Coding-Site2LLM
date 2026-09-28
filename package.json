@@ -3,16 +3,29 @@
   "private": true,
   "_comment": "test:all is intentionally disabled. Original: npm run test:unit && npm run test:routing && npm run test:contracts && npm run test:version",
   "scripts": {
+    "build:extension": "tsc -p tsconfig.extension.json",
+    "typecheck:extension": "tsc --noEmit -p tsconfig.extension.json",
+    "prepackage:crx": "npm run build:extension",
     "package:crx": "powershell -ExecutionPolicy Bypass -File .build/package.ps1",
     "release": "powershell -ExecutionPolicy Bypass -File .build/release.ps1",
     "test:release": "node --test tests/fast-core-feature.test.js tests/popup-daily-practice.test.js tests/local-routing.test.js tests/global-extension-contract.test.js tests/version-contract.test.js",
+    "pretest:release": "npm run build:extension",
     "dev:check": "powershell -ExecutionPolicy Bypass -File tests/dev-check.ps1",
     "session:end": "powershell -ExecutionPolicy Bypass -File tests/session-end.ps1",
     "test": "npm run test:unit",
+    "pretest:unit": "npm run build:extension",
     "test:unit": "node --test tests/fast-core-feature.test.js tests/popup-daily-practice.test.js",
+    "pretest:routing": "npm run build:extension",
     "test:routing": "node --test tests/local-routing.test.js",
+    "pretest:contracts": "npm run build:extension",
     "test:contracts": "node --test tests/global-extension-contract.test.js",
+    "pretest:version": "npm run build:extension",
     "test:version": "node --test tests/version-contract.test.js",
+    "predev:check": "npm run build:extension",
     "smoke": "node tests/deprecated/browser-smoke.test.js"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.0",
+    "typescript": "^7.0.2"
   }
 }

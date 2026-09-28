@@ -10,7 +10,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const ROOT_DIR = path.join(__dirname, "..");
+const ROOT_DIR = path.join(__dirname, "..", "extension");
 
 test("dismisses any closable dialog that appears after an Exercism overview loads", () => {
     let dialogVisible = false;

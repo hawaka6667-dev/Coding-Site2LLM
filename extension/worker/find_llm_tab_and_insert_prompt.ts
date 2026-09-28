@@ -4,7 +4,10 @@ role: find nearby LLM tab and insert captured prompt
 owns: provider-specific tab and input behavior
 */
 
-async function findLlmTab(currentTab, preferredProvider = LLM_PROVIDERS[0]) {
+async function findLlmTab(
+    currentTab: chrome.tabs.Tab,
+    preferredProvider: LlmProvider = LLM_PROVIDERS[0]
+) {
     const tabs = await chrome.tabs.query({ windowId: currentTab.windowId });
     const leftOfCurrent = tabs
         .filter(tab => tab.id !== currentTab.id && typeof tab.index === "number")
@@ -28,7 +31,7 @@ async function findLlmTab(currentTab, preferredProvider = LLM_PROVIDERS[0]) {
     return { tab, provider: preferredProvider };
 }
 
-async function focusDeepSeekInput(tabId) {
+async function focusDeepSeekInput(tabId: number) {
     const found = await executePage(tabId, selectors => {
         for (const selector of selectors) {
             for (const element of document.querySelectorAll(selector)) {
@@ -45,7 +48,7 @@ async function focusDeepSeekInput(tabId) {
     return found === true;
 }
 
-async function waitForDeepSeekInput(tabId, timeout = 30000) {
+async function waitForDeepSeekInput(tabId: number, timeout = 30000) {
     const start = performance.now();
 
     while (performance.now() - start < timeout) {
@@ -59,7 +62,7 @@ async function waitForDeepSeekInput(tabId, timeout = 30000) {
     throw new Error("DeepSeek input not found.");
 }
 
-async function insertText(tabId, text) {
+async function insertText(tabId: number, text: string) {
     const inserted = await executePage(tabId, value => {
         const input = document.activeElement;
         if (!input) {

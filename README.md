@@ -26,3 +26,14 @@
 2. Enable **Developer mode**.
 3. Drag and drop the `.crx` file onto the extensions page.
 4. Pin the extension to the Chrome toolbar for quick access
+
+## Development (Unpacked Extension)
+
+Install dependencies and compile the TypeScript service-worker sources before loading the extension:
+
+```powershell
+npm ci
+npm run build:extension
+```
+
+Then choose `extension/` in `chrome://extensions/` with **Load unpacked**. Re-run `npm run build:extension` after changing TypeScript sources; the test and packaging commands build them automatically.

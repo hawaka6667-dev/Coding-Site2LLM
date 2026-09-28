@@ -4,7 +4,7 @@ role: map page URL to adapter and assemble captured fields
 contract: no generated instructions or prompt prose
 */
 
-const PLATFORMS = [
+const PLATFORMS: CodingSiteAdapter[] = [
     ExercismAdapter,
     ExercismOverviewAdapter,
     LeetCodeAdapter,
@@ -12,7 +12,7 @@ const PLATFORMS = [
     SourceFallbackAdapter
 ];
 
-function cleanLeetCodeDescription(text) {
+function cleanLeetCodeDescription(text: string) {
     return String(text || "")
         .replace(/Can\s+you\s+solve\s+this\s+real\s+interview\s+question\?\s*/i, "")
         .replace(/(?:^|\n)\s*Beats\s+\d+(?:\.\d+)?%[^\n]*(?:\n|$)/gi, "\n")
@@ -21,7 +21,7 @@ function cleanLeetCodeDescription(text) {
         .trim();
 }
 
-function cleanLeetCodeFeedback(text) {
+function cleanLeetCodeFeedback(text: string) {
     return String(text || "")
         .split(/\r?\n/)
         .map(line => line.replace(/\s+Beats\b.*$/i, "").trim())
@@ -29,7 +29,7 @@ function cleanLeetCodeFeedback(text) {
         .join("\n");
 }
 
-function getPlatform(url) {
+function getPlatform(url: string): CodingSiteAdapter {
     if (isViewSourceUrl(url)) {
         throw new Error(
             "Open the normal Exercism page instead of view-source:; Chrome does not allow extensions to attach to view-source pages."
@@ -42,7 +42,7 @@ function getPlatform(url) {
     return platform || SourceFallbackAdapter;
 }
 
-function getCodingPageIdentity(url, platformName) {
+function getCodingPageIdentity(url: string, platformName: string) {
     try {
         const parsedUrl = new URL(pageUrl(url));
         const pathname = parsedUrl.pathname;
@@ -77,7 +77,7 @@ function getCodingPageIdentity(url, platformName) {
     }
 }
 
-function buildPrompt(context) {
+function buildPrompt(context: CodingSiteContext) {
     const sections = [
         context.title || "",
         context.platform === "LeetCode"
@@ -92,8 +92,10 @@ function buildPrompt(context) {
     return sections.filter(Boolean).join("\n\n");
 }
 
-function diagnoseContext(context) {
-    const fields = ["title", "description", "source", "language", "feedback"];
+function diagnoseContext(context: CodingSiteContext) {
+    const fields: (keyof CodingSiteContext)[] = [
+        "title", "description", "source", "language", "feedback"
+    ];
     const values = Object.fromEntries(fields.map(field => {
         const value = typeof context?.[field] === "string"
             ? context[field].trim()

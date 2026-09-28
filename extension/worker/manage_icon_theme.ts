@@ -14,8 +14,9 @@ if (typeof chrome === "undefined" || !chrome.storage?.local || !chrome.action?.s
     // Unit-test sandboxes load the service worker without extension APIs.
 } else {
 
-function getIconThemePath(theme) {
-    const basePath = ICON_THEME_PATHS[theme] || ICON_THEME_PATHS[DEFAULT_ICON_THEME];
+function getIconThemePath(theme: unknown) {
+    const basePath = ICON_THEME_PATHS[theme as keyof typeof ICON_THEME_PATHS] ||
+        ICON_THEME_PATHS[DEFAULT_ICON_THEME];
     return {
         16: `${basePath}-16.png`,
         32: `${basePath}-32.png`,
@@ -24,7 +25,7 @@ function getIconThemePath(theme) {
     };
 }
 
-async function applyIconTheme(theme) {
+async function applyIconTheme(theme: unknown) {
     await chrome.action.setIcon({ path: getIconThemePath(theme) });
 }
 

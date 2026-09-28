@@ -1,5 +1,5 @@
 /* @machine
-file: worker/configure_supported_coding_sites_and_llm_providers.js
+file: worker/configure_supported_coding_sites_and_llm_providers.ts
 role: define site URL matches, provider metadata, input selectors
 owns: configuration only
 */
@@ -22,7 +22,13 @@ const CODEWARS_URL =
 const DEEPSEEK_URL =
     /^https:\/\/(chat\.)?deepseek\.com\//;
 
-const LLM_PROVIDERS = [
+type LlmProvider = {
+    name: string;
+    url: string;
+    match: (url: string) => boolean;
+};
+
+const LLM_PROVIDERS: LlmProvider[] = [
     {
         name: "DeepSeek",
         url: "https://chat.deepseek.com/",
@@ -51,7 +57,7 @@ const LLM_PROVIDERS = [
     }
 ];
 
-const INPUT_SELECTORS = [
+const INPUT_SELECTORS: string[] = [
     "textarea",
     '[contenteditable="true"]',
     '[role="textbox"]'
