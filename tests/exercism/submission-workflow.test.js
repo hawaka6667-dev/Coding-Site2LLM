@@ -11,7 +11,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { ROOT_DIR, loadRoutingWorker } = require("../worker-test-harness.js");
 
-test("opens the same submitted Exercism overview in an unfocused window only when enabled", async () => {
+test("coordinates overview window creation and completion close from the owning content script", async () => {
     const editorTab = {
         id: 7,
         windowId: 3,
@@ -19,7 +19,29 @@ test("opens the same submitted Exercism overview in an unfocused window only whe
     };
     const context = loadRoutingWorker({ tabs: [editorTab] });
     const pageListeners = new Map();
+    const runtimeMessageListeners = [];
     const replacements = [];
+    const removedWindows = [];
+    context.chrome.windows.remove = async windowId => removedWindows.push(windowId);
+    const overviewTab = {
+        id: 21,
+        windowId: 21,
+        url: "https://exercism.org/tracks/go/exercises/lasagna?via=back-link"
+    };
+    context.chrome.tabs.query = async details => details?.windowId === 21
+        ? [overviewTab]
+        : [editorTab];
+
+    function sendWorkerMessage(message, tab) {
+        return new Promise(resolve => {
+            for (const listener of context.messageListeners) {
+                const keepChannelOpen = listener(message, { tab }, resolve);
+                if (keepChannelOpen !== true) {
+                    resolve(undefined);
+                }
+            }
+        });
+    }
     const backToExerciseLink = {
         innerText: "Back to Exercise",
         href: "https://exercism.org/tracks/go/exercises/lasagna?via=back-link",
@@ -43,12 +65,13 @@ test("opens the same submitted Exercism overview in an unfocused window only whe
             replace: url => replacements.push(url)
         },
         chrome: {
+            storage: { local: { get: async () => ({ exercismAutoMarkComplete: true }) } },
             runtime: {
-                sendMessage: message => {
-                    for (const listener of context.messageListeners) {
-                        listener(message, { tab: editorTab }, () => {});
-                    }
-                }
+                onMessage: { addListener: listener => runtimeMessageListeners.push(listener) },
+                sendMessage: message => sendWorkerMessage(
+                    message,
+                    pageContext.location.href.endsWith("/edit") ? editorTab : overviewTab
+                )
             }
         }
     });
@@ -59,7 +82,7 @@ test("opens the same submitted Exercism overview in an unfocused window only whe
                 "worker",
                 "exercism",
                 "edit",
-                "return_to_editor_after_submit_redirect.js"
+                "manage_submitted_exercism_overview_window.js"
             ),
             "utf8"
         ),
@@ -84,6 +107,7 @@ test("opens the same submitted Exercism overview in an unfocused window only whe
     };
     beforeVisitListeners[0](overviewVisit);
     await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(overviewVisit.prevented, true);
     assert.deepEqual(replacements, [editorTab.url]);
@@ -93,30 +117,71 @@ test("opens the same submitted Exercism overview in an unfocused window only whe
     }]));
     assert.equal(context.createdTabs.length, 0);
 
+    pageContext.location.href = overviewTab.url;
+    for (const listener of runtimeMessageListeners) {
+        listener({
+            type: "exercism-submitted-overview-completion-result",
+            completed: true
+        }, {});
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(removedWindows, [21]);
+
     const disabledContext = loadRoutingWorker({
         tabs: [editorTab],
         autoMarkComplete: false
     });
-    disabledContext.messageListeners[0](
-        {
-            type: "exercism-open-submitted-overview",
-            overviewUrl: "https://exercism.org/tracks/go/exercises/lasagna"
+    const disabledMessages = [];
+    const disabledListeners = new Map();
+    const disabledPage = vm.createContext({
+        URL,
+        Date,
+        document: {
+            addEventListener: (type, listener) => disabledListeners.set(type, listener),
+            querySelectorAll: () => [backToExerciseLink]
         },
-        { tab: editorTab },
-        () => {}
+        location: { href: editorTab.url, replace: url => replacements.push(url) },
+        chrome: {
+            storage: { local: { get: async () => ({ exercismAutoMarkComplete: false }) } },
+            runtime: {
+                onMessage: { addListener: () => {} },
+                sendMessage: message => disabledMessages.push(message)
+            }
+        }
+    });
+    vm.runInContext(
+        fs.readFileSync(path.join(
+            ROOT_DIR,
+            "worker",
+            "exercism",
+            "edit",
+            "manage_submitted_exercism_overview_window.js"
+        ), "utf8"),
+        disabledPage
     );
+    disabledListeners.get("click")({
+        target: { closest: () => ({ disabled: false }) }
+    });
+    const disabledVisit = {
+        detail: { url: "https://exercism.org/tracks/go/exercises/lasagna" },
+        preventDefault() {}
+    };
+    disabledListeners.get("turbo:before-visit")(disabledVisit);
     await new Promise(resolve => setImmediate(resolve));
-    assert.equal(disabledContext.createdWindows.length, 0);
+    assert.equal(disabledMessages.length, 0);
+    assert.equal(replacements.at(-1), backToExerciseLink.href);
 
     const invalidTargetContext = loadRoutingWorker({ tabs: [editorTab] });
-    invalidTargetContext.messageListeners[0](
+    const invalidRequest = new Promise(resolve => invalidTargetContext.messageListeners[0](
         {
-            type: "exercism-open-submitted-overview",
+            type: "exercism-create-submitted-overview-window",
             overviewUrl: "https://evil.example/tracks/go/exercises/lasagna"
         },
         { tab: editorTab },
-        () => {}
-    );
+        resolve
+    ));
+    assert.equal((await invalidRequest).opened, false);
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(invalidTargetContext.createdWindows.length, 0);
 });

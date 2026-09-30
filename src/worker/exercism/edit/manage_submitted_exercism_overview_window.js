@@ -1,19 +1,21 @@
 /* @machine
-file: worker/exercism/edit/return_to_editor_after_submit_redirect.js
-role: keep a Submit-triggered Turbo redirect on the current exercise editor
-scope: editor pages only
+file: worker/exercism/edit/manage_submitted_exercism_overview_window.js
+role: own the submitted overview window lifecycle
+scope: editor submission redirect and submitted overview completion
 */
 
 const EXERCISM_FOOTER_SUBMIT_BUTTON_SELECTOR =
     ".lhs-footer .submit-btn button";
 const EXERCISM_EDIT_PATH_PATTERN =
     /^\/tracks\/([^/]+)\/exercises\/([^/]+)\/edit\/?$/;
+const EXERCISM_OVERVIEW_URL_PATTERN =
+    /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/?#]+\/?(?:[?#]|$)/;
+const SUBMIT_REDIRECT_MAX_AGE_MS = 120000;
+const AUTO_MARK_COMPLETE_SETTING_KEY = "exercismAutoMarkComplete";
 
 let submitRedirectReturnTarget = "";
 let submitRedirectOverviewTarget = "";
 let submitRedirectStartedAt = 0;
-
-const SUBMIT_REDIRECT_MAX_AGE_MS = 120000;
 
 function getExercismEditorUrl(value) {
     try {
@@ -42,6 +44,10 @@ function isOverviewForEditor(overviewUrl, editorUrl) {
     } catch (_) {
         return false;
     }
+}
+
+function isExercismOverviewPage(url = location.href) {
+    return EXERCISM_OVERVIEW_URL_PATTERN.test(url);
 }
 
 function getBackToExerciseUrl() {
@@ -85,22 +91,44 @@ function consumeSubmitRedirectTarget(overviewUrl) {
     return { editorUrl, overviewUrl: backToExerciseUrl };
 }
 
-function openSubmittedOverviewAndKeepEditor(target) {
-    const sendMessage = globalThis.chrome?.runtime?.sendMessage;
+async function openSubmittedOverviewAndKeepEditor(target, navigateToOverviewOnFailure) {
+    let opened = false;
 
-    if (typeof sendMessage === "function") {
-        try {
-            sendMessage.call(globalThis.chrome.runtime, {
-                type: "exercism-open-submitted-overview",
+    try {
+        const stored = await chrome.storage.local.get(AUTO_MARK_COMPLETE_SETTING_KEY);
+        if (stored[AUTO_MARK_COMPLETE_SETTING_KEY] !== false) {
+            const response = await chrome.runtime.sendMessage({
+                type: "exercism-create-submitted-overview-window",
                 overviewUrl: target.overviewUrl
             });
-        } catch (_) {
-            // The extension context may disappear while the page remains open.
+            opened = response?.opened === true;
         }
+    } catch (_) {
+        opened = false;
     }
 
-    location.replace(target.editorUrl);
+    if (opened) {
+        location.replace(target.editorUrl);
+    } else if (navigateToOverviewOnFailure) {
+        location.replace(target.overviewUrl);
+    }
 }
+
+function closeSubmittedOverviewAfterCompletion(message) {
+    if (
+        message?.type !== "exercism-submitted-overview-completion-result" ||
+        message.completed !== true ||
+        !isExercismOverviewPage()
+    ) {
+        return;
+    }
+
+    chrome.runtime.sendMessage({
+        type: "exercism-close-submitted-overview-window"
+    }).catch(() => {});
+}
+
+chrome.runtime.onMessage.addListener(closeSubmittedOverviewAfterCompletion);
 
 document.addEventListener("click", event => {
     const button = event.target?.closest?.(
@@ -124,7 +152,7 @@ document.addEventListener("turbo:before-visit", event => {
     }
 
     event.preventDefault();
-    openSubmittedOverviewAndKeepEditor(target);
+    void openSubmittedOverviewAndKeepEditor(target, true);
 }, true);
 
 document.addEventListener("turbo:load", () => {
@@ -135,7 +163,7 @@ document.addEventListener("turbo:load", () => {
     const target = consumeSubmitRedirectTarget(location.href);
 
     if (target) {
-        openSubmittedOverviewAndKeepEditor(target);
+        void openSubmittedOverviewAndKeepEditor(target, false);
         return;
     }
 

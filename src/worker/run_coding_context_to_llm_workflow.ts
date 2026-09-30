@@ -2,18 +2,22 @@
 file: worker/run_coding_context_to_llm_workflow.js
 role: coordinate end-to-end workflow and Chrome listeners
 contract: no website selectors or page-specific extraction
+可能需要解耦
 */
 
 let workflowPromise: Promise<void> | null = null;
 let returnRoutes: Record<string, CodingSiteReturnRoute> | null = null;
+const smartReturnPromises = new Map<string, Promise<void>>();
 let keyboardShortcutHeld = false;
 let keyboardShortcutHeldReleaseToken = "";
 let keyboardShortcutReleaseTimer: ReturnType<typeof setTimeout> | null = null;
 const exercismSubmitPromises = new Map();
 const RETURN_ROUTE_KEY = "codingSite2LlmReturnRoute";
 const RETURN_ROUTES_KEY = "codingSite2LlmReturnRoutes";
+const SUBMITTED_OVERVIEW_WINDOWS_KEY = "codingSite2LlmSubmittedOverviewWindows";
 const SELECTED_LLM_PROVIDER_KEY = "selectedLlmProvider";
 const KEYBOARD_SHORTCUT_LOCK_TIMEOUT_MS = 10000;
+let submittedOverviewWindows: Record<string, string> | null = null;
 
 async function getSelectedLlmProvider() {
     const stored = await chrome.storage.local.get(SELECTED_LLM_PROVIDER_KEY);
@@ -278,13 +282,16 @@ async function returnToCodingPage(llmTab: chrome.tabs.Tab) {
     const tabs = await chrome.tabs.query({ windowId: llmTab.windowId });
     const sourceTab = tabs.find(tab => tab.id === route.sourceTabId);
 
-    if (sourceTab?.url && route.sourceUrl) {
+    const maintainedIdentity = route.sourceIdentity || getCodingPageIdentity(
+        route.sourceUrl || "",
+        route.sourcePlatform || ""
+    );
+
+    if (sourceTab?.url && maintainedIdentity) {
         const sourceIdentity = getCodingPageIdentity(
             sourceTab.url,
             route.sourcePlatform
         );
-        const maintainedIdentity = route.sourceIdentity ||
-            getCodingPageIdentity(route.sourceUrl, route.sourcePlatform);
 
         if (!sourceIdentity || sourceIdentity !== maintainedIdentity) {
             await clearReturnRoute(routeKey);
@@ -293,7 +300,7 @@ async function returnToCodingPage(llmTab: chrome.tabs.Tab) {
     }
 
     const sourceIsValid = sourceTab &&
-        isCodingTabForPlatform(sourceTab, route.sourcePlatform);
+        isCodingTabForPlatform(sourceTab, route.sourcePlatform, maintainedIdentity);
     const targetPlatform = route.sourcePlatform === "Exercism overview"
         ? "Exercism"
         : route.sourcePlatform;
@@ -303,10 +310,7 @@ async function returnToCodingPage(llmTab: chrome.tabs.Tab) {
             tabs,
             llmTab,
             targetPlatform,
-            route.sourceIdentity || getCodingPageIdentity(
-                route.sourceUrl,
-                route.sourcePlatform
-            )
+            maintainedIdentity
         );
 
     if (!targetTab) {
@@ -345,8 +349,36 @@ async function returnToCodingPage(llmTab: chrome.tabs.Tab) {
     }
 }
 
-function isCodingTabForPlatform(tab: chrome.tabs.Tab, sourcePlatform: string) {
-    if (!tab?.id || !tab.url || sourcePlatform === "Web source") {
+async function runSmartReturn(llmTab: chrome.tabs.Tab) {
+    const routeKey = getReturnRouteKey(llmTab.windowId, llmTab.id);
+
+    if (smartReturnPromises.has(routeKey)) {
+        console.warn("[workflow] Smart Return already running; ignoring duplicate trigger.");
+        return;
+    }
+
+    const promise = returnToCodingPage(llmTab);
+    smartReturnPromises.set(routeKey, promise);
+
+    try {
+        await promise;
+    } finally {
+        if (smartReturnPromises.get(routeKey) === promise) {
+            smartReturnPromises.delete(routeKey);
+        }
+    }
+}
+
+function isCodingTabForPlatform(
+    tab: chrome.tabs.Tab,
+    sourcePlatform: string,
+    preferredIdentity = ""
+) {
+    if (
+        !tab?.id ||
+        !tab.url ||
+        (sourcePlatform === "Web source" && !preferredIdentity)
+    ) {
         return false;
     }
 
@@ -359,7 +391,10 @@ function isCodingTabForPlatform(tab: chrome.tabs.Tab, sourcePlatform: string) {
         }
 
         const platform = getPlatform(tab.url);
-        return platform.name === sourcePlatform && platform.name !== "Exercism overview";
+        return platform.name === sourcePlatform &&
+            platform.name !== "Exercism overview" &&
+            (sourcePlatform !== "Web source" ||
+                getCodingPageIdentity(tab.url, sourcePlatform) === preferredIdentity);
     } catch (_) {
         return false;
     }
@@ -373,7 +408,7 @@ function findRightCodingTab(
 ) {
     const candidates = tabs
         .filter(tab => typeof tab.index === "number" && tab.index > llmTab.index)
-        .filter(tab => isCodingTabForPlatform(tab, sourcePlatform))
+        .filter(tab => isCodingTabForPlatform(tab, sourcePlatform, preferredIdentity))
         .sort((left, right) => left.index - right.index);
 
     if (preferredIdentity) {
@@ -526,16 +561,33 @@ async function runExercismTestSubmit(
     }
 }
 
-async function openSubmittedExercismOverview(
+async function loadSubmittedOverviewWindows() {
+    if (submittedOverviewWindows) {
+        return submittedOverviewWindows;
+    }
+
+    const stored = await chrome.storage.session?.get?.(
+        SUBMITTED_OVERVIEW_WINDOWS_KEY
+    );
+    const saved = stored?.[SUBMITTED_OVERVIEW_WINDOWS_KEY];
+    submittedOverviewWindows = saved && typeof saved === "object"
+        ? saved as Record<string, string>
+        : {};
+    return submittedOverviewWindows;
+}
+
+async function persistSubmittedOverviewWindows(windows: Record<string, string>) {
+    submittedOverviewWindows = windows;
+    await chrome.storage.session?.set?.({
+        [SUBMITTED_OVERVIEW_WINDOWS_KEY]: windows
+    });
+}
+
+async function createSubmittedOverviewWindow(
     senderTab: chrome.tabs.Tab,
     overviewUrl: string
 ) {
     if (!senderTab?.id || typeof senderTab.url !== "string") {
-        return false;
-    }
-
-    const settings = await chrome.storage.local.get("exercismAutoMarkComplete");
-    if (settings.exercismAutoMarkComplete === false) {
         return false;
     }
 
@@ -555,10 +607,58 @@ async function openSubmittedExercismOverview(
             return false;
         }
 
-        await chrome.windows.create({
+        const createdWindow = await chrome.windows.create({
             url: targetUrl.href,
             focused: false
         });
+
+        if (!Number.isInteger(createdWindow?.id)) {
+            return false;
+        }
+
+        const windows = await loadSubmittedOverviewWindows();
+        windows[String(createdWindow.id)] = targetUrl.pathname;
+        try {
+            await persistSubmittedOverviewWindows(windows);
+        } catch (_) {
+            await chrome.windows.remove(createdWindow.id).catch(() => {});
+            return false;
+        }
+
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+async function closeSubmittedOverviewWindow(senderTab: chrome.tabs.Tab) {
+    if (!Number.isInteger(senderTab?.id) || !Number.isInteger(senderTab.windowId)) {
+        return false;
+    }
+
+    try {
+        const windows = await loadSubmittedOverviewWindows();
+        const windowKey = String(senderTab.windowId);
+        const expectedPath = windows[windowKey];
+        const overviewUrl = new URL(senderTab.url || "");
+
+        if (
+            !expectedPath ||
+            overviewUrl.origin !== "https://exercism.org" ||
+            overviewUrl.pathname !== expectedPath
+        ) {
+            return false;
+        }
+
+        const tabs = await chrome.tabs.query({ windowId: senderTab.windowId });
+        if (tabs.length === 1 && tabs[0].id === senderTab.id) {
+            await chrome.windows.remove(senderTab.windowId);
+        } else {
+            await chrome.tabs.remove(senderTab.id);
+        }
+
+        delete windows[windowKey];
+        await persistSubmittedOverviewWindows(windows);
         return true;
     } catch (_) {
         return false;
@@ -764,7 +864,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (command === "send-context") {
                 await runWorkflow(message.selectedText);
             } else if (command === "smart-return" && tab) {
-                await returnToCodingPage(tab);
+                await runSmartReturn(tab);
             }
         })().catch(error => {
             console.error("[workflow] ERROR:", error);
@@ -806,11 +906,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
-    if (message?.type === "exercism-open-submitted-overview") {
-        openSubmittedExercismOverview(sender.tab, message.overviewUrl).catch(error => {
-            console.error("[exercism] overview tab ERROR:", error);
-        });
-        return;
+    if (message?.type === "exercism-create-submitted-overview-window") {
+        createSubmittedOverviewWindow(sender.tab, message.overviewUrl)
+            .then(opened => sendResponse({ opened }))
+            .catch(error => {
+                console.error("[exercism] overview window create ERROR:", error);
+                sendResponse({ opened: false });
+            });
+        return true;
+    }
+
+    if (message?.type === "exercism-close-submitted-overview-window") {
+        closeSubmittedOverviewWindow(sender.tab)
+            .then(closed => sendResponse({ closed }))
+            .catch(error => {
+                console.error("[exercism] overview window close ERROR:", error);
+                sendResponse({ closed: false });
+            });
+        return true;
     }
 
     if (message?.type === "llm-copy") {
@@ -827,12 +940,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     if (!tabId) {
         console.error("[exercism] mark complete ERROR: sender tab not found.");
+        sendResponse({ completed: false });
         return;
     }
 
     markCompleteAndRefreshConcepts(tabId, sender.tab.url)
-        .then(completed => completed ? chrome.tabs.remove(tabId) : undefined)
+        .then(completed => {
+            sendResponse({ completed });
+            if (completed && typeof chrome.tabs.sendMessage === "function") {
+                chrome.tabs.sendMessage(tabId, {
+                    type: "exercism-submitted-overview-completion-result",
+                    completed: true
+                }).catch(error => {
+                    console.error("[exercism] overview completion notice ERROR:", error);
+                });
+            }
+        })
         .catch(error => {
             console.error("[exercism] mark complete ERROR:", error);
+            sendResponse({ completed: false });
         });
+    return true;
 });

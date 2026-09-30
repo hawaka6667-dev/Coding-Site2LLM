@@ -40,9 +40,9 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | --- | --- | --- |
 | prompt、site context | `src/worker/adapters/` | `npm run test:unit` |
 | URL routing 和 site routing | `src/worker/route_coding_page_and_build_llm_prompt.ts` | `npm run test:routing` |
-| Exercism overview redirect and completion confirmation | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism overview redirect and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `src/worker/exercism/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js` | `npm run test:routing` |
+| Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js` | `npm run test:routing` |
 | Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts` | `npm run test:unit` |
 | Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/exercism/edit/continue-dialogs.test.js` | `npm run test:unit` |
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
@@ -54,12 +54,10 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 ### 标准验证顺序
 
 1. 先运行与改动职责对应的 smallest relevant test。
-2. 需要确认 page behavior 时，使用 Chrome DevTools MCP 检查真实 DOM、routing 和 editor state。
-3. 修改 unpacked extension 后，测试通过先 reload extension，再刷新本次改动影响到的已打开 coding/LLM 页面。
-4. 用户要求 `reload` 时，重载扩展并刷新受影响网页；不判断、保护或处理任何页面内容。
-5. 扩展 reload 使用 Chrome DevTools MCP 的 `reload_extension`；随后通过扩展 Service Worker 单次调用 `chrome.tabs.query` 和并行 `chrome.tabs.reload` 刷新目标网页。不得把这项工作扩展成内容保护任务。
-7. 需要用户点击 UI control 时，明确提醒用户确认；不要用猜测的 coordinates 代替确认。
-8. 页面验证结束后，默认刷新受影响页面；不处理页面内容。
+2. 需要确认 page behavior 时，使用 Chrome DevTools MCP 检查真实 DOM、routing 和 editor state；模拟测试不能标为真实浏览器验证。
+3. 默认不 reload extension，也不刷新已打开网页；网页刷新由用户管理。只有用户在本轮明确授权时才执行对应操作。
+4. 用户明确要求 reload extension 时，使用 Chrome DevTools MCP 的 `reload_extension`；除非用户也明确要求，否则不要刷新页面。
+5. 需要用户点击 UI control 时，明确提醒用户确认；不要用猜测的 coordinates 代替确认。
 
 ### 测试挂起与超时防护
 
@@ -142,7 +140,7 @@ LLM 页不主动分析题目。扩展只负责传输已有页面上下文。
 
 切题、返回题目或其它同页路由切换后，必须在动作发生时重新读取当前 URL、可见 editor 和它绑定的 model；不能复用页面初次加载时缓存的 editor/model。若 editor 正在卸载或重建，adapter 可有界等待当前可见实例就绪；editor 列表暂时为空时，不得把残留的全局旧 model 当成当前 editor 写入。
 
-Exercism 的 `Back to Exercise` 是具体的 Turbo 导航例子：`return_to_editor_after_submit_redirect.js` 通过 `turbo:before-visit` / `turbo:load` 处理提交后的同页跳转；`open_exercise_in_editor.js` 也监听 Turbo 生命周期及 DOM 变化。LeetCode 切题后的 Monaco 延迟挂载由 `tests/routing/editor-targeting.test.js` 覆盖。新增或修改导航行为时，测试必须区分整页加载与客户端路由，并验证切换后使用的是当前页面/editor 状态。
+Exercism 的 `Back to Exercise` 是具体的 Turbo 导航例子：`edit/manage_submitted_exercism_overview_window.js` 通过 `turbo:before-visit` / `turbo:load` 管理提交后的同题 overview 窗口；`open_exercise_in_editor.js` 也监听 Turbo 生命周期及 DOM 变化。LeetCode 切题后的 Monaco 延迟挂载由 `tests/routing/editor-targeting.test.js` 覆盖。新增或修改导航行为时，测试必须区分整页加载与客户端路由，并验证切换后使用的是当前页面/editor 状态。
 
 快捷键动作是两个独立的 action：
 
@@ -180,6 +178,8 @@ LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当�
 
 Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payload；找到目标页后，无论代码写入、测试或提交成功或失败，payload 都必须在 `finally` 中消费并清空，下一次回跳只可使用新的复制事件。仅在没有匹配目标页时保留 payload，避免用户关闭来源页后丢失尚未消费的复制内容。扩展 reload、Service Worker 重启和页面 Turbo 导航都必须按这个 lifecycle 恢复可用状态，不能让上一轮的 payload 意外进入下一轮。
 
+同一个 LLM tab 的 Smart Return 必须串行到当前异步 cycle 完成，按键释放不代表回跳流程完成；不同 LLM tab 可独立运行。`Web source` 的 Smart Return 只可返回到完整 URL identity 相同的 HTTP(S) 页面，不得退回到任意网页。
+
 测试必须至少覆盖同一 tab 的两轮连续 workflow，以及第一轮在写入、运行或提交阶段失败后第二轮仍能正常开始；不要只用单次成功断言证明 workflow 正确。
 
 ### 模块边界
@@ -189,11 +189,11 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `worker/adapters/*_adapter.ts` | 每个站点独立负责页面提取、过滤、编辑器回写和站点内测试提交 | 其它站点 selector、跨页面导航策略 |
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
 | `find_llm_tab_and_insert_prompt.js` | 找到指定 provider 并插入 prompt | 站点状态判断 |
-| `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由；已确认的 Exercism 提交可在自动完成开启时后台打开同题 overview | 站点专属 selector |
+| `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由；校验提交 overview 生命周期请求并执行 Chrome 窗口/标签 API | 站点专属 selector、决定何时打开或关闭 overview |
+| `edit/manage_submitted_exercism_overview_window.js` | 由 edit 提交流程发起，决定同题 overview 是否在未聚焦独立窗口打开；成功完成后请求关闭自己登记的 overview | 直接调用 Chrome 窗口 API、普通 overview 进入编辑器策略 |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
-| `auto_mark_exercise_complete.js` | 仅发现可用的 `Mark as complete` 并请求完成链 | 是否进入 `/edit` |
+| `auto_mark_exercise_complete.js` | 在 overview URL 发现可用的 `Mark as complete` 并请求完成链；也预先注入 Exercism `/edit` 文档以监听返回 overview 的 Turbo 导航 | 是否进入 `/edit` |
 | `auto_submit_after_manual_run.js` | 监听用户 Run Tests 并请求提交链 | overview 跳转和完成按钮 |
-| `return_to_editor_after_submit_redirect.js` | 拦截 Submit 导致的同题 overview Turbo 跳转并留在 `/edit` | overview 的普通进入编辑器策略 |
 | `continue_after_exercism_modals.js` | 关闭 edit 页上可见、可用的 `Continue` 弹窗 | Submit 和 overview completion |
 | `content.js` | 编辑页快捷键桥接 | Exercism 状态推断 |
 
@@ -227,6 +227,10 @@ overview 和 `/edit` 是两个不同的页面状态。`open_exercise_in_editor.j
 
 `auto_mark_exercise_complete.js` 独立监听页面上的可见、可用 `Mark as complete` 按钮，并发送 `exercism-mark-complete` 消息。它不调用跳转函数，也不改变跳转模块的状态。
 
+Exercism 的 Turbo 导航不会按目标 URL 重新注入 Manifest content scripts。编辑页因此也必须预先加载 `auto_mark_exercise_complete.js`；该脚本在 `/edit` 只监听导航，不扫描或请求完成，只有 URL 到达 overview 后才处理按钮。回归测试覆盖 `/edit` → `Back to Exercise` Turbo 导航。
+
+完成请求必须等待 Service Worker 回传完成结果；只有确认完成后才将当前 overview URL 标记为已处理。失败或无响应时按有界退避重试，页面 DOM/Turbo 状态变化及设置重新启用时重新检查；不能把“消息已发出”视为完成，否则临时失败只能靠刷新清除页面内状态。
+
 编辑页提交链由其它模块负责：
 
 ```text
@@ -250,7 +254,7 @@ Run Tests（按钮可用时）
 
 自动完成链必须区分 iteration passed 与 exercise completed。`Exercise Solved` 只表示提交的 iteration 通过，不能单独作为完成成功信号；完成链只在 overview 状态为 `completed` 或出现可见的完成结果对话框后返回成功。`tests/exercism/overview/auto-mark-complete.test.js` 覆盖条件按钮出现 → 发起完成请求 → 确认弹窗 → 完成结果输出，并断言结果出现前不刷新 track concepts。
 
-**【待真实流程验证】** 最新 Run Tests 通过并完成 Submit 后，Exercism 会发起同题 overview 的 Turbo 导航。`return_to_editor_after_submit_redirect.js` 从 `Back to Exercise` 链接读取实际 `href`，通知 Service Worker 在未聚焦的新窗口打开同题 overview，同时把原标签留在 `/edit`，避免新增标签挤占当前窗口。Service Worker 只接受同源、同题 URL；`exercismAutoMarkComplete` 关闭时不创建 overview 窗口。overview 的 `auto_mark_exercise_complete.js` 负责发现 `Mark as complete` 并运行完成确认链；确认成功及概念页刷新完成后，Service Worker 自动关闭 overview 标签及其窗口。代码和路由测试已覆盖未聚焦新窗口；真实浏览器中的提交流程与关闭行为仍待验证。
+**【待真实流程验证】** `edit/manage_submitted_exercism_overview_window.js` 在编辑页捕获 Submit 和实际 `Back to Exercise` 链接，拦截同题 overview Turbo 导航；仅在 `exercismAutoMarkComplete` 开启时请求创建未聚焦窗口，并等待 Service Worker 回执。创建成功后原标签留在 `/edit`；关闭设置或创建失败时导航回 overview。该脚本也注入 overview 页：收到完成链成功通知后，由它决定请求关闭自己创建的 overview。Service Worker 只校验同源、同题和创建窗口登记关系，并执行 Chrome 窗口/标签 API；完成成功后不自行决定关闭。`auto_mark_exercise_complete.js` 继续负责发现 `Mark as complete`、请求完成及等待结果。路由测试覆盖创建回执、设置关闭时的 fallback 和登记窗口关闭；真实浏览器中的提交流程仍待验证。
 
 不要按按钮文字匹配编辑页的 Run/Submit；tab 栏和结果面板存在同名文本。
 

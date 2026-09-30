@@ -7,6 +7,7 @@
     "typecheck:extension": "tsc --noEmit -p tsconfig.extension.json",
     "prepackage:crx": "npm run build:extension",
     "package:crx": "powershell -ExecutionPolicy Bypass -File .build/package.ps1",
+    "sync": "powershell -ExecutionPolicy Bypass -File .build/sync.ps1",
     "release": "powershell -ExecutionPolicy Bypass -File .build/release.ps1",
     "test:release": "node --test tests/worker/*.test.js tests/exercism/**/*.test.js tests/routing/*.test.js tests/popup-daily-practice.test.js tests/global-extension-contract.test.js tests/version-contract.test.js",
     "pretest:release": "npm run build:extension",

@@ -4,6 +4,7 @@
 !.build/
 !.build/package.ps1
 !.build/release.ps1
+!.build/sync.ps1
 
 # Generated extension package: compiled TypeScript and copied runtime assets.
 /dist/

@@ -32,7 +32,12 @@ test("rechecks Exercism auto-completion after Turbo navigation", async () => {
     const context = vm.createContext({
         chrome: {
             storage: { local: { get: async () => ({}) } },
-            runtime: { sendMessage: message => messages.push(message) }
+            runtime: {
+                sendMessage: async message => {
+                    messages.push(message);
+                    return { completed: true };
+                }
+            }
         },
         document,
         location: { href: "https://exercism.org/tracks/go/exercises/example/edit" },
@@ -61,6 +66,170 @@ test("rechecks Exercism auto-completion after Turbo navigation", async () => {
     context.location.href = "https://exercism.org/tracks/go/exercises/another-example";
     documentListeners.get("turbo:load")();
     await new Promise(resolve => setImmediate(resolve));
+    assert.equal(messages.length, 2);
+    assert.equal(messages.every(message => message.type === "exercism-mark-complete"), true);
+});
+
+test("waits on the editor page and handles Back to Exercise Turbo navigation", async () => {
+    const documentListeners = new Map();
+    const messages = [];
+    let hasMarkComplete = true;
+    const button = {
+        innerText: "Mark as complete",
+        offsetWidth: 100,
+        offsetHeight: 30,
+        disabled: false
+    };
+    const context = vm.createContext({
+        chrome: {
+            storage: { local: { get: async () => ({}) } },
+            runtime: {
+                sendMessage: async message => {
+                    messages.push(message);
+                    return { completed: true };
+                }
+            }
+        },
+        document: {
+            documentElement: {},
+            addEventListener: (type, listener) => documentListeners.set(type, listener),
+            querySelectorAll: () => hasMarkComplete ? [button] : []
+        },
+        location: { href: "https://exercism.org/tracks/ruby/exercises/log-line-parser/edit" },
+        MutationObserver: class { observe() {} },
+        console
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
+            "utf8"
+        ),
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(messages.length, 0);
+
+    context.location.href = "https://exercism.org/tracks/ruby/exercises/log-line-parser";
+    documentListeners.get("turbo:load")();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(messages.map(message => message.type), ["exercism-mark-complete"]);
+});
+
+test("rechecks when the Mark as complete button becomes enabled", async () => {
+    const messages = [];
+    let mutationCallback;
+    let observerOptions;
+    const button = {
+        innerText: "Mark as complete",
+        offsetWidth: 100,
+        offsetHeight: 30,
+        disabled: true
+    };
+    const buttons = [button];
+    const context = vm.createContext({
+        chrome: {
+            storage: { local: { get: async () => ({}) } },
+            runtime: {
+                sendMessage: async message => {
+                    messages.push(message);
+                    return { completed: true };
+                }
+            }
+        },
+        document: {
+            documentElement: {},
+            addEventListener: () => {},
+            querySelectorAll: () => buttons
+        },
+        location: { href: "https://exercism.org/tracks/go/exercises/example" },
+        MutationObserver: class {
+            constructor(callback) {
+                mutationCallback = callback;
+            }
+            observe(_target, options) {
+                observerOptions = options;
+            }
+        },
+        console
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
+            "utf8"
+        ),
+        context
+    );
+
+    await new Promise(resolve => setImmediate(resolve));
+
+    button.disabled = false;
+    if (observerOptions.attributes) {
+        mutationCallback();
+    }
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(observerOptions.attributes, true);
+    assert.equal(observerOptions.characterData, true);
+    assert.ok(observerOptions.attributeFilter.includes("disabled"));
+    assert.ok(observerOptions.attributeFilter.includes("aria-disabled"));
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].type, "exercism-mark-complete");
+});
+
+test("retries completion after the service worker reports a failed attempt", async () => {
+    const messages = [];
+    const retryTimers = [];
+    let attempt = 0;
+    const button = {
+        innerText: "Mark as complete",
+        offsetWidth: 100,
+        offsetHeight: 30,
+        disabled: false
+    };
+    const context = vm.createContext({
+        chrome: {
+            storage: { local: { get: async () => ({}) } },
+            runtime: {
+                sendMessage: async message => {
+                    messages.push(message);
+                    attempt += 1;
+                    return { completed: attempt > 1 };
+                }
+            }
+        },
+        document: {
+            documentElement: {},
+            addEventListener: () => {},
+            querySelectorAll: () => [button]
+        },
+        location: { href: "https://exercism.org/tracks/go/exercises/example" },
+        MutationObserver: class { observe() {} },
+        setTimeout: callback => {
+            retryTimers.push(callback);
+            return retryTimers.length;
+        },
+        clearTimeout() {},
+        console
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
+            "utf8"
+        ),
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(messages.length, 1);
+    assert.equal(retryTimers.length, 1);
+    retryTimers.shift()();
+    await new Promise(resolve => setImmediate(resolve));
+
     assert.equal(messages.length, 2);
     assert.equal(messages.every(message => message.type === "exercism-mark-complete"), true);
 });
@@ -128,7 +297,7 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
     const messages = [];
     const events = [];
     const reloadedTabIds = [];
-    const removedTabIds = worker.removedTabs;
+    const completionNotices = [];
     const markButton = {
         innerText: "Mark as complete",
         offsetWidth: 100,
@@ -204,9 +373,9 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
             ? `concepts-reloaded-after-result-${tabId}`
             : `concepts-reloaded-before-result-${tabId}`);
     };
-    worker.chrome.tabs.remove = async tabId => {
-        removedTabIds.push(tabId);
-        events.push(`overview-closed-${tabId}`);
+    worker.chrome.tabs.sendMessage = async (tabId, message) => {
+        completionNotices.push({ tabId, message: JSON.parse(JSON.stringify(message)) });
+        events.push(`completion-notice-sent-${tabId}`);
     };
 
     const documentListeners = new Map();
@@ -221,7 +390,7 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
         chrome: {
             storage: { local: { get: async () => ({}) } },
             runtime: {
-                sendMessage: message => {
+                sendMessage: message => new Promise(resolve => {
                     messages.push(message);
                     for (const listener of worker.messageListeners) {
                         listener(message, {
@@ -229,9 +398,9 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
                                 id: 10,
                                 url: "https://exercism.org/tracks/sqlite/exercises/hello-world"
                             }
-                        }, () => {});
+                        }, resolve);
                     }
-                }
+                })
             }
         },
         document: pageDocument,
@@ -260,7 +429,7 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
     overviewMutationCallback();
 
     const deadline = Date.now() + 1000;
-    while (removedTabIds.length < 1 && Date.now() < deadline) {
+    while (completionNotices.length < 1 && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 0));
     }
 
@@ -273,7 +442,13 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
         ["exercism-mark-complete"]
     );
     assert.deepEqual(reloadedTabIds, [1, 3]);
-    assert.deepEqual(removedTabIds, [10]);
+    assert.deepEqual(completionNotices, [{
+        tabId: 10,
+        message: {
+            type: "exercism-submitted-overview-completion-result",
+            completed: true
+        }
+    }]);
     assert.ok(
         events.indexOf("completion-result-output") <
             events.indexOf("concepts-reloaded-after-result-1"),
@@ -281,7 +456,7 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
     );
     assert.ok(
         events.indexOf("concepts-reloaded-after-result-3") <
-            events.indexOf("overview-closed-10"),
-        "the overview must close after the concepts refresh"
+            events.indexOf("completion-notice-sent-10"),
+        "the owner must be notified after the concepts refresh"
     );
 });

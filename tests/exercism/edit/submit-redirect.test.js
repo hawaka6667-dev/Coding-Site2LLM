@@ -11,7 +11,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { ROOT_DIR } = require("../../worker-test-harness.js");
 
-test("returns to the same Exercism editor when Submit navigates to its overview", () => {
+test("returns to the same Exercism editor after the submitted overview window opens", async () => {
     const listeners = [];
     const replacements = [];
     const messages = [];
@@ -32,7 +32,16 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
         URL,
         Date: { now: () => now },
         document,
-        chrome: { runtime: { sendMessage: message => messages.push(message) } },
+        chrome: {
+            storage: { local: { get: async () => ({ exercismAutoMarkComplete: true }) } },
+            runtime: {
+                onMessage: { addListener: () => {} },
+                sendMessage: message => {
+                    messages.push(message);
+                    return Promise.resolve({ opened: true });
+                }
+            }
+        },
         location: {
             href: "https://exercism.org/tracks/python/exercises/pov/edit",
             replace: url => replacements.push(url)
@@ -46,7 +55,7 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
                 "worker",
                 "exercism",
                 "edit",
-                "return_to_editor_after_submit_redirect.js"
+                "manage_submitted_exercism_overview_window.js"
             ),
             "utf8"
         ),
@@ -75,13 +84,14 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
         }
     };
     beforeVisitListener.listener(overviewVisit);
+    await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(overviewVisit.prevented, true);
     assert.deepEqual(replacements, [
         "https://exercism.org/tracks/python/exercises/pov/edit"
     ]);
     assert.equal(JSON.stringify(messages), JSON.stringify([{
-        type: "exercism-open-submitted-overview",
+        type: "exercism-create-submitted-overview-window",
         overviewUrl: "https://exercism.org/tracks/python/exercises/pov?from=editor"
     }]));
 
@@ -112,6 +122,7 @@ test("returns to the same Exercism editor when Submit navigates to its overview"
     submitClickListener.listener(clickEvent);
     context.location.href = "https://exercism.org/tracks/python/exercises/pov";
     loadedOverviewListener.listener();
+    await new Promise(resolve => setImmediate(resolve));
 
     assert.deepEqual(replacements, [
         "https://exercism.org/tracks/python/exercises/pov/edit",

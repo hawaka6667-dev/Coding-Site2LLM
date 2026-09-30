@@ -52,13 +52,12 @@ gh release view $tag --json url,assets --jq '{url: .url, assets: [.assets[].name
 
 ## 普通 Git 同步
 
-普通 `git sync` 只做 pull → commit → push，不创建版本 tag 或 GitHub Release。
+普通 Git 同步使用 `npm run sync`，只做 pull/rebase → 暂存当前改动 → commit → push，不调整版本、不创建 tag 或 GitHub Release。默认提交说明为 `Sync changes`，也可传入说明：
 
-1. 检查当前分支、upstream、`git status --short --branch` 和本地/远端提交差异；确认用户希望同步的改动。
-2. 使用 `git fetch` 更新远端跟踪信息，再从当前分支 upstream 执行 `git pull --rebase`。
-3. 若 pull 因本地改动被拒绝，确认改动可恢复后临时 stash（包含 untracked），pull 成功后立即恢复；不要删除 stash。
-4. 有冲突时保留双方内容并解决；无法确定正确结果时停止并询问。禁止 `reset --hard`、`checkout --` 和 force push。
-5. 只 stage 已确认文件，检查 staged diff 和必要测试，再创建描述准确的 commit。不要 `git add .` 或 `git add -A`，除非用户明确要求提交全部并已逐项核对。
-6. 最后 `git push` 到当前分支 upstream，并检查 `git status --short --branch`。认证、网络或权限失败时保留本地 commit，不要重复创建提交。
+```powershell
+npm run sync -- -Message "Describe the changes"
+```
+
+认证、网络或 rebase 冲突会使脚本停止；解决冲突后重新运行，不要 force push。
 
 完成后简要报告 pull、commit、push 结果及未提交改动；普通同步不得混入 Release 操作。

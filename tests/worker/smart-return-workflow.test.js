@@ -98,6 +98,119 @@ test("returns and replaces code after an LLM copy event", async () => {
     );
 });
 
+test("returns to the exact generic HTTP source page", async () => {
+    const context = loadCoreWorker();
+    const sourceUrl = "https://example.com/task?case=1";
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: sourceUrl },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    const updates = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    context.readClipboard = async () => "";
+    vm.runInContext(
+        `returnRoutes = { "1:20": { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: "Web source", sourceUrl: ${JSON.stringify(sourceUrl)}, sourceIdentity: ${JSON.stringify(sourceUrl)} } }`,
+        context
+    );
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1 })",
+        context
+    );
+
+    assert.deepEqual(updates.map(([tabId]) => tabId), [10]);
+    assert.equal(
+        vm.runInContext("returnRoutes['1:20'].status", context),
+        "routed"
+    );
+});
+
+test("uses only an exact generic HTTP URL as a fallback", async () => {
+    const context = loadCoreWorker();
+    const sourceUrl = "https://example.com/task?case=1";
+    context.tabState.push(
+        { id: 20, windowId: 1, index: 0, url: "https://chat.deepseek.com/" },
+        { id: 30, windowId: 1, index: 1, url: "https://example.com/task?case=2" },
+        { id: 40, windowId: 1, index: 2, url: sourceUrl }
+    );
+    const updates = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    context.readClipboard = async () => "";
+    vm.runInContext(
+        `returnRoutes = { "1:20": { windowId: 1, sourceTabId: null, llmTabId: 20, sourcePlatform: "Web source", sourceUrl: ${JSON.stringify(sourceUrl)}, sourceIdentity: ${JSON.stringify(sourceUrl)}, status: "orphaned" } }`,
+        context
+    );
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1, index: 0 })",
+        context
+    );
+
+    assert.deepEqual(updates.map(([tabId]) => tabId), [40]);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].sourceTabId", context), 40);
+});
+
+test("does not use a different generic HTTP URL as a fallback", async () => {
+    const context = loadCoreWorker();
+    const sourceUrl = "https://example.com/task?case=1";
+    context.tabState.push(
+        { id: 20, windowId: 1, index: 0, url: "https://chat.deepseek.com/" },
+        { id: 30, windowId: 1, index: 1, url: "https://example.com/task?case=2" }
+    );
+    const updates = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    context.readClipboard = async () => "";
+    vm.runInContext(
+        `returnRoutes = { "1:20": { windowId: 1, sourceTabId: null, llmTabId: 20, sourcePlatform: "Web source", sourceUrl: ${JSON.stringify(sourceUrl)}, sourceIdentity: ${JSON.stringify(sourceUrl)}, status: "orphaned" } }`,
+        context
+    );
+
+    await vm.runInContext(
+        "returnToCodingPage({ id: 20, windowId: 1, index: 0 })",
+        context
+    );
+
+    assert.deepEqual(updates, []);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].sourceTabId", context), null);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].status", context), "orphaned");
+});
+
+test("does not overlap Smart Return cycles for the same LLM tab", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
+        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
+    );
+    let releaseClipboard;
+    let submitCount = 0;
+    context.readClipboard = () => new Promise(resolve => {
+        releaseClipboard = resolve;
+    });
+    context.chrome.tabs.update = async () => {};
+    context.replaceCode = async () => {};
+    context.submitReturnedCode = async () => { submitCount += 1; };
+    vm.runInContext(
+        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism', sourceUrl: 'https://exercism.org/tracks/python/exercises/pov/edit', sourceIdentity: 'Exercism:python:pov', copied: true, copiedText: 'fixed code' } }",
+        context
+    );
+
+    const firstRun = vm.runInContext(
+        "runSmartReturn({ id: 20, windowId: 1 })",
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof releaseClipboard, "function");
+
+    await vm.runInContext(
+        "runSmartReturn({ id: 20, windowId: 1 })",
+        context
+    );
+    releaseClipboard("");
+    await firstRun;
+
+    assert.equal(submitCount, 1);
+});
+
 test("clears consumed LLM copy when Smart Return submission fails", async () => {
     const context = loadCoreWorker();
     context.tabState.push(

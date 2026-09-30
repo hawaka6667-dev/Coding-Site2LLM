@@ -68,7 +68,7 @@ Coding-Site2LLM/
 │       │   │   ├── auto_submit_after_manual_run.js
 │       │   │   ├── content.js
 │       │   │   ├── continue_after_exercism_modals.js
-│       │   │   └── return_to_editor_after_submit_redirect.js
+│       │   │   └── manage_submitted_exercism_overview_window.js
 │       │   └── overview/
 │       │       ├── auto_mark_exercise_complete.js
 │       │       ├── dismiss_exercism_overview_closable_dialogs.js
