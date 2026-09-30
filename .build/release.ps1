@@ -1,6 +1,5 @@
 <#
 Publish the already-committed manifest version as a GitHub release.
-Local CodeGraph state and feedback screenshots are intentionally ignored.
 #>
 $ErrorActionPreference = "Stop"
 
@@ -69,8 +68,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to push $tag."
 }
 
+$ErrorActionPreference = "Continue"
 & gh release view $tag *> $null
-if ($LASTEXITCODE -eq 0) {
+$releaseExists = $LASTEXITCODE -eq 0
+$ErrorActionPreference = "Stop"
+
+if ($releaseExists) {
     & gh release upload $tag $crxPath --clobber
 } else {
     & gh release create $tag $crxPath --title "Coding Site2LLM $tag" --generate-notes

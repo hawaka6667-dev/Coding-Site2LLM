@@ -24,31 +24,7 @@ npm run release
 
 项目脚本会运行 `test:release`、生成 CRX/ZIP、推送 `main`、创建或推送版本 tag，并上传 CRX 到 GitHub Release。不要先重复运行 `test:release` 或 `package:crx`，除非正在定位失败；脚本会再次执行这些步骤。
 
-### 新 Release 的已知故障恢复
-
-当前 `.build/release.ps1` 用 `gh release view $tag *> $null` 判断 Release 是否存在。PowerShell 的 `$ErrorActionPreference = "Stop"` 会把“release not found”的 stderr 当成终止异常，因此首次创建 Release 时，脚本可能已经成功推送 `main` 和 tag，却在创建 Release 前退出。
-
-遇到该错误时：
-
-1. 不要再次运行 `npm run release`；main 和 tag 通常已经推送，再跑会重复测试和打包并再次失败。
-2. 从 `manifest.json` 取得版本，确认对应 tag 已在远端，并确认 GitHub Release 尚不存在。
-3. 直接创建 Release 并上传脚本已生成的 CRX：
-
-```powershell
-$version = (Get-Content manifest.json -Raw | ConvertFrom-Json).version
-$tag = "v$version"
-gh release create $tag ".build/Coding-Site2LLM-$tag.crx" --title "Coding Site2LLM $tag" --generate-notes
-```
-
-4. 验证 URL 和资产：
-
-```powershell
-gh release view $tag --json url,assets --jq '{url: .url, assets: [.assets[].name]}'
-```
-
-若 Release 已存在而只需补传或替换 CRX，使用 `gh release upload $tag ".build/Coding-Site2LLM-$tag.crx" --clobber`，不要重新创建 tag。
-
-汇报最终 Release URL、版本、资产、测试结果，以及工作区遗留改动。只有确认远端状态后才报告“已发布”。
+发布完成后汇报 Release URL、版本、资产和测试结果。
 
 ## 普通 Git 同步
 
