@@ -4,7 +4,6 @@ role: request mark-complete chain when control appears
 scope: overview behavior; editor documents preload the Turbo watcher
 owns: independent from open_exercise_in_editor
 events: turbo:load | turbo:render | MutationObserver
-闭环已完成
 */
 
 let completedUrl = "";
@@ -13,13 +12,35 @@ let pendingCheck = false;
 let retryUrl = "";
 let retryCount = 0;
 let retryTimer = null;
-const AUTO_MARK_COMPLETE_SETTING_KEY = "exercismAutoMarkComplete";
+let autoCompleteOperationId = "";
+let waitingForMarkCompleteLogged = false;
+let autoCompleteDisabledLogged = false;
+const AUTO_MARK_COMPLETE_STORAGE_KEY = "exercismAutoMarkComplete";
 const RETRY_DELAYS_MS = [1000, 3000, 7000];
-const EXERCISM_OVERVIEW_URL_PATTERN =
+const AUTO_MARK_COMPLETE_OVERVIEW_URL_PATTERN =
     /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/?#]+\/?(?:[?#]|$)/;
 
 function isExercismOverviewPage(url = location.href) {
-    return EXERCISM_OVERVIEW_URL_PATTERN.test(url);
+    return AUTO_MARK_COMPLETE_OVERVIEW_URL_PATTERN.test(url);
+}
+
+function logExercismAutoCompleteDiagnostic(stage, details = {}) {
+    const diagnostics = globalThis.CodingSite2LlmDiagnostics;
+    if (!diagnostics) {
+        return "";
+    }
+
+    if (!autoCompleteOperationId) {
+        autoCompleteOperationId = diagnostics.createOperationId();
+    }
+
+    diagnostics.log(
+        "exercism-mark-complete",
+        autoCompleteOperationId,
+        stage,
+        details
+    );
+    return autoCompleteOperationId;
 }
 
 function requestMarkComplete() {
@@ -30,6 +51,12 @@ function requestMarkComplete() {
 
     const currentUrl = location.href;
     if (!isExercismOverviewPage(currentUrl)) {
+        if (autoCompleteOperationId) {
+            logExercismAutoCompleteDiagnostic("workflow.cancelled", {
+                reason: "left-overview"
+            });
+        }
+        autoCompleteOperationId = "";
         if (retryTimer) {
             clearTimeout(retryTimer);
         }
@@ -46,6 +73,12 @@ function requestMarkComplete() {
         retryTimer = null;
         retryUrl = currentUrl;
         retryCount = 0;
+        autoCompleteOperationId = "";
+        waitingForMarkCompleteLogged = false;
+        autoCompleteDisabledLogged = false;
+        logExercismAutoCompleteDiagnostic("watch.started", {
+            platform: "Exercism"
+        });
     }
 
     if (completedUrl === currentUrl || retryTimer) {
@@ -58,14 +91,21 @@ function requestMarkComplete() {
         const pageUrl = currentUrl;
 
         try {
-            const stored = await chrome.storage.local.get(AUTO_MARK_COMPLETE_SETTING_KEY);
+            const stored = await chrome.storage.local.get(AUTO_MARK_COMPLETE_STORAGE_KEY);
             if (location.href !== pageUrl) {
                 pendingCheck = true;
                 return;
             }
-            if (stored[AUTO_MARK_COMPLETE_SETTING_KEY] === false) {
+            if (stored[AUTO_MARK_COMPLETE_STORAGE_KEY] === false) {
+                if (!autoCompleteDisabledLogged) {
+                    autoCompleteDisabledLogged = true;
+                    logExercismAutoCompleteDiagnostic("workflow.skipped", {
+                        reason: "setting-disabled"
+                    });
+                }
                 return;
             }
+            autoCompleteDisabledLogged = false;
 
             const button = [...document.querySelectorAll("button")].find(candidate =>
                 candidate.offsetWidth > 0 &&
@@ -76,29 +116,51 @@ function requestMarkComplete() {
             );
 
             if (!button) {
+                if (!waitingForMarkCompleteLogged) {
+                    waitingForMarkCompleteLogged = true;
+                    logExercismAutoCompleteDiagnostic("control.waiting", {
+                        reason: "button-not-ready"
+                    });
+                }
                 return;
             }
+            waitingForMarkCompleteLogged = false;
+            logExercismAutoCompleteDiagnostic("control.ready", {
+                platform: "Exercism"
+            });
 
             const sendMessage = globalThis.chrome?.runtime?.sendMessage;
             if (typeof sendMessage !== "function") {
-                scheduleRetry(pageUrl);
+                scheduleRetry(pageUrl, "message-unavailable");
                 return;
             }
 
+            const operationId = autoCompleteOperationId;
+            logExercismAutoCompleteDiagnostic("request.sent");
             const response = await sendMessage.call(globalThis.chrome.runtime, {
-                type: "exercism-mark-complete"
+                type: "exercism-mark-complete",
+                operationId
             });
 
             if (location.href !== pageUrl) {
+                logExercismAutoCompleteDiagnostic("workflow.cancelled", {
+                    reason: "route-changed"
+                });
                 pendingCheck = true;
             } else if (response?.completed === true) {
                 completedUrl = pageUrl;
                 retryCount = 0;
+                logExercismAutoCompleteDiagnostic("workflow.completed", {
+                    result: "confirmed"
+                });
             } else {
-                scheduleRetry(pageUrl);
+                scheduleRetry(pageUrl, "worker-not-confirmed");
             }
-        } catch (_) {
-            scheduleRetry(pageUrl);
+        } catch (error) {
+            logExercismAutoCompleteDiagnostic("request.failed", {
+                errorName: error instanceof Error ? error.name : "UnknownError"
+            });
+            scheduleRetry(pageUrl, "request-error");
         } finally {
             requestInFlight = false;
 
@@ -110,7 +172,7 @@ function requestMarkComplete() {
     })();
 }
 
-function scheduleRetry(pageUrl) {
+function scheduleRetry(pageUrl, reason) {
     if (location.href !== pageUrl || completedUrl === pageUrl || retryTimer) {
         return;
     }
@@ -122,10 +184,18 @@ function scheduleRetry(pageUrl) {
 
     const delay = RETRY_DELAYS_MS[retryCount];
     if (delay === undefined) {
+        logExercismAutoCompleteDiagnostic("workflow.failed", {
+            reason: "retry-limit-reached"
+        });
+        autoCompleteOperationId = "";
         return;
     }
 
     retryCount += 1;
+    logExercismAutoCompleteDiagnostic("retry.scheduled", {
+        attempt: retryCount,
+        reason
+    });
     retryTimer = setTimeout(() => {
         retryTimer = null;
         requestMarkComplete();
@@ -152,7 +222,7 @@ function startWatching() {
     document.addEventListener("turbo:load", observeMarkCompleteChanges);
     document.addEventListener("turbo:render", observeMarkCompleteChanges);
     chrome.storage.onChanged?.addListener((changes, areaName) => {
-        if (areaName === "local" && changes[AUTO_MARK_COMPLETE_SETTING_KEY]) {
+        if (areaName === "local" && changes[AUTO_MARK_COMPLETE_STORAGE_KEY]) {
             observeMarkCompleteChanges();
         }
     });

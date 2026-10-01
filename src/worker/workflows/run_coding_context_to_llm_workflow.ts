@@ -1,9 +1,7 @@
 /* @machine
 file: worker/workflows/run_coding_context_to_llm_workflow.js
-role: orchestrate send-context capture and dispatch worker message workflows
-owns: source route creation, LLM prompt delivery, shortcut lock and runtime message routing
-does_not_own: route-store internals, Smart Return execution, Exercism page and workflow details
-contract: load state and feature owners before registering runtime dispatch
+role: capture coding-page context and dispatch worker workflows
+contract: establish send-context routes and delegate Smart Return and Exercism behavior
 */
 
 let workflowPromise: Promise<void> | null = null;
@@ -20,29 +18,60 @@ async function getSelectedLlmProvider() {
     ) || LLM_PROVIDERS[0];
 }
 
-async function runWorkflow(selectedText = "") {
+async function runWorkflow(
+    selectedText = "",
+    operationId = (globalThis as any).CodingSite2LlmDiagnostics.createOperationId()
+) {
     if (workflowPromise) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "send-context",
+            operationId,
+            "workflow.skipped",
+            { reason: "already-running" }
+        );
         console.warn("[workflow] Already running; ignoring duplicate trigger.");
         return workflowPromise;
     }
 
-    workflowPromise = runWorkflowOnce(selectedText);
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "send-context",
+        operationId,
+        "workflow.started"
+    );
+    workflowPromise = runWorkflowOnce(selectedText, operationId);
 
     try {
-        return await workflowPromise;
+        await workflowPromise;
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "send-context",
+            operationId,
+            "workflow.completed"
+        );
+    } catch (error) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "send-context",
+            operationId,
+            "workflow.failed",
+            { errorName: error instanceof Error ? error.name : "UnknownError" }
+        );
+        throw error;
     } finally {
         workflowPromise = null;
     }
 }
 
-async function runWorkflowOnce(selectedText = "") {
+async function runWorkflowOnce(selectedText = "", operationId: string) {
     const totalStart = performance.now();
 
     function mark(label: string, start: number) {
-        console.log(
-            `[profiler] ${label}:`,
-            Math.round(performance.now() - start),
-            "ms"
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "send-context",
+            operationId,
+            "step.completed",
+            {
+                reason: label,
+                durationMs: Math.round(performance.now() - start)
+            }
         );
     }
 
@@ -59,19 +88,30 @@ async function runWorkflowOnce(selectedText = "") {
     }
 
     const platform = getPlatform(currentTab.url);
-    console.log("[workflow] platform:", platform.name);
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "send-context",
+        operationId,
+        "source.selected",
+        { tabId: currentTab.id, platform: platform.name }
+    );
 
     start = performance.now();
     let prompt;
+    let contextFields;
     if (typeof selectedText === "string" && selectedText.trim()) {
         prompt = selectedText;
     } else {
         const context = await platform.getContext(currentTab.id);
-        console.log("[workflow] context diagnostics:", diagnoseContext(context));
+        contextFields = diagnoseContext(context).fields;
         prompt = buildPrompt(context);
     }
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "send-context",
+        operationId,
+        "context.captured",
+        { platform: platform.name, hasPayload: !!prompt, contextFields }
+    );
     mark(`${platform.name}.getSource`, start);
-    console.log("[workflow] prompt:", prompt.length, "characters");
 
     start = performance.now();
     const llm = await findLlmTab(
@@ -93,6 +133,17 @@ async function runWorkflowOnce(selectedText = "") {
         copied: false,
         copiedText: ""
     });
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "send-context",
+        operationId,
+        "route.saved",
+        {
+            platform: platform.name,
+            provider: llm.provider.name,
+            sourceTabId: currentTab.id,
+            targetTabId: deepSeekTab.id
+        }
+    );
     mark(`find ${llm.provider.name}`, start);
 
     start = performance.now();
@@ -105,7 +156,7 @@ async function runWorkflowOnce(selectedText = "") {
 
     start = performance.now();
     await insertText(deepSeekTab.id, prompt);
-    mark(`insertText (${prompt.length} chars)`, start);
+    mark("insertText", start);
 
     start = performance.now();
     await keyTap(deepSeekTab.id, "Enter");
@@ -115,10 +166,11 @@ async function runWorkflowOnce(selectedText = "") {
     await scrollUp(deepSeekTab.id, 50);
     mark("scroll", start);
 
-    console.log(
-        "[profiler] TOTAL:",
-        Math.round(performance.now() - totalStart),
-        "ms"
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "send-context",
+        operationId,
+        "workflow.steps-completed",
+        { durationMs: Math.round(performance.now() - totalStart) }
     );
 }
 
@@ -133,6 +185,14 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "coding-site2llm-diagnostic") {
+        (globalThis as any).CodingSite2LlmDiagnostics.write(
+            message.event,
+            sender.tab?.id
+        );
+        return false;
+    }
+
     if (message?.type === "keyboard-shortcut-release") {
         if (message.releaseToken !== keyboardShortcutHeldReleaseToken) {
             return;
@@ -149,6 +209,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "keyboard-shortcut") {
         const tab = sender.tab;
         const command = message.command;
+        const operationId = (globalThis as any).CodingSite2LlmDiagnostics.createOperationId();
+
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            command === "smart-return" ? "smart-return" : "send-context",
+            operationId,
+            "trigger.received",
+            { tabId: tab?.id, reason: "keyboard-shortcut" }
+        );
 
         if (keyboardShortcutHeld) {
             return;
@@ -163,9 +231,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         (async () => {
             if (command === "send-context") {
-                await runWorkflow(message.selectedText);
+                await runWorkflow(message.selectedText, operationId);
             } else if (command === "smart-return" && tab) {
-                await runSmartReturn(tab);
+                await runSmartReturn(tab, operationId);
             }
         })().catch(error => {
             console.error("[workflow] ERROR:", error);
@@ -175,7 +243,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === "run-workflow") {
         // The popup owns the send button, so it needs the outcome back.
-        runWorkflow()
+        const operationId = (globalThis as any).CodingSite2LlmDiagnostics.createOperationId();
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "send-context",
+            operationId,
+            "trigger.received",
+            { reason: "popup" }
+        );
+        runWorkflow("", operationId)
             .then(() => sendResponse({ ok: true }))
             .catch(error => {
                 console.error("[workflow] ERROR:", error);

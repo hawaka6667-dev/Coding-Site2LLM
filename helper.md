@@ -6,7 +6,7 @@
 这份文档面向两类读者，内容按这两个入口组织：
 
 - **人**：快速恢复 project context，知道下一步改哪里、测什么。
-- **LLM**：恢复 technical context，知道哪些是 module contract，哪些只是 implementation detail。
+- **LLM**：恢复 technical context，知道哪些是 module contract，哪些只是 implementation detail。**
 
 ## A. 给人：快速恢复
 
@@ -40,12 +40,13 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | --- | --- | --- |
 | prompt、site context | `src/worker/adapters/` | `npm run test:unit` |
 | URL routing 和 site routing | `src/worker/route_coding_page_and_build_llm_prompt.ts` | `npm run test:routing` |
-| Exercism overview redirect and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js`, `src/worker/workflows/exercism_workflow.ts` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism overview redirect, auto-completion and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js`, `src/worker/workflows/exercism_workflow.ts` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `src/worker/exercism/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/workflows/smart_return_workflow.ts`, `src/worker/workflows/exercism_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js` | `npm run test:routing` |
 | Smart Return route maintenance and code write-back | `src/worker/state/return_route_store.ts`, `src/worker/workflows/smart_return_workflow.ts`, `src/worker/adapters/` | `npm run test:unit` |
 | Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/workflows/smart_return_workflow.ts` | `npm run test:unit` |
 | Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/exercism/edit/continue-dialogs.test.js` | `npm run test:unit` |
+| core workflow operation logs and debug-module refactor | `src/worker/debug/` (planned), `src/worker/diagnostics.js`, `src/worker/workflows/`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:unit` 和 `npm run test:routing` |
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
 | extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
 | development environment and generated package | `tests/dev-check.ps1`, `package.json`, `src/manifest.json`, `dist/` | `npm run dev:check` |
@@ -88,6 +89,8 @@ live page
   -> reload_extension
   -> refresh page 并复核
 ```
+
+核心工作流日志的查看位置、关联方式和隐私约束见下方「Debug 追踪」。
 
 执行扩展刷新时，先调用 Chrome DevTools MCP 的 `reload_extension`，再通过扩展 Service Worker 单次批量刷新本次改动影响到的网页；不处理网页内容。
 
@@ -183,6 +186,10 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 
 测试必须至少覆盖同一 tab 的两轮连续 workflow、第一轮失败后第二轮仍能开始，以及第一轮尚未收尾时新 route 已写入且旧 finalizer 不得覆盖它；不要只用单次成功断言证明 workflow 正确。
 
+### Debug 追踪
+
+`send-context`、Smart Return 和 Exercism 完成流程使用 `operationId` 关联阶段日志；在扩展 Service Worker 的 DevTools Console 中按 `[CodingSite2LLM]` 查看。当前统一入口是 `src/worker/diagnostics.js`，部分阶段埋点仍位于 workflow 和 content script。日志只记录阶段、结果、平台、tab ID、耗时及脱敏后的上下文摘要，不记录 prompt、题目正文、剪贴板或用户代码；轮询和 DOM 观察只记录状态变化或终态。以后将日志职责迁入 `src/worker/debug/` 前，先在本节明确模块职责与事件契约。
+
 ### 模块边界
 
 | 模块 | 只负责 | 不负责 |
@@ -191,6 +198,7 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
 | `find_llm_tab_and_insert_prompt.js` | 找到指定 provider 并插入 prompt | 站点状态判断 |
 | `worker/state/return_route_store.ts` | 按 `windowId + llmTabId` 持久化返回路由和复制 payload；监听来源身份变化与标签关闭；提供 revision-guarded 更新和 payload consumption | 选择回跳目标、编辑器写入和提交 |
+| `worker/diagnostics.js` | 为页面 content script 与 Service Worker 提供脱敏的结构化操作日志及 `operationId` | 记录页面正文、prompt、剪贴板或用户代码；输出高频轮询/DOM 变更日志 |
 | `worker/workflows/smart_return_workflow.ts` | 串行执行 Smart Return，校验 source 身份，选择匹配页面，回填并提交复制代码；基于捕获 revision 更新目标状态和消费 payload | 发送 prompt、route 持久化、Exercism overview 生命周期 |
 | `worker/workflows/exercism_workflow.ts` | 协调 Exercism test-submit、受管 overview 窗口、Mark as complete 和 concepts 刷新 | 页面 selector 和 overview/edit 页面状态判断 |
 | `worker/workflows/run_coding_context_to_llm_workflow.ts` | 捕获 coding context、建立发送来源 route、选择 LLM 并发送 prompt；维护快捷键锁和 runtime message dispatch | route 持久化实现、Smart Return 回填、Exercism 窗口生命周期 |
@@ -234,6 +242,8 @@ overview 和 `/edit` 是两个不同的页面状态。`open_exercise_in_editor.j
 Exercism 的 Turbo 导航不会按目标 URL 重新注入 Manifest content scripts。编辑页因此也必须预先加载 `auto_mark_exercise_complete.js`；该脚本在 `/edit` 只监听导航，不扫描或请求完成，只有 URL 到达 overview 后才处理按钮。回归测试覆盖 `/edit` → `Back to Exercise` Turbo 导航。
 
 完成请求必须等待 Service Worker 回传完成结果；只有确认完成后才将当前 overview URL 标记为已处理。失败或无响应时按有界退避重试，页面 DOM/Turbo 状态变化及设置重新启用时重新检查；不能把“消息已发出”视为完成，否则临时失败只能靠刷新清除页面内状态。
+
+同一 Exercism 页面上注册的 content scripts 共用扩展隔离世界；不同脚本的顶层 `const` / `let` 名称必须唯一，否则重复声明会阻止脚本解析。`tests/exercism/overview/auto-mark-complete.test.js` 将自动完成脚本与提交窗口脚本在共享上下文按两种顺序加载，覆盖此约束。
 
 编辑页提交链由其它模块负责：
 

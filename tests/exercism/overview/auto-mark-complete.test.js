@@ -11,6 +11,45 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { ROOT_DIR, loadRoutingWorker, loadExercismOverviewScript } = require("../../worker-test-harness.js");
 
+test("overview automation scripts can coexist in the shared extension world", () => {
+    const scriptPaths = [
+        path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
+        path.join(ROOT_DIR, "worker", "exercism", "edit", "manage_submitted_exercism_overview_window.js")
+    ];
+
+    for (const orderedPaths of [scriptPaths, [...scriptPaths].reverse()]) {
+        const context = vm.createContext({
+            chrome: {
+                storage: {
+                    local: { get: async () => ({}) },
+                    onChanged: { addListener() {} }
+                },
+                runtime: {
+                    onMessage: { addListener() {} },
+                    sendMessage: async () => ({})
+                }
+            },
+            document: {
+                documentElement: {},
+                addEventListener() {},
+                querySelectorAll: () => []
+            },
+            location: {
+                href: "https://exercism.org/tracks/ruby/exercises/example"
+            },
+            MutationObserver: class { observe() {} },
+            console,
+            URL
+        });
+
+        assert.doesNotThrow(() => {
+            for (const scriptPath of orderedPaths) {
+                vm.runInContext(fs.readFileSync(scriptPath, "utf8"), context);
+            }
+        });
+    }
+});
+
 test("rechecks Exercism auto-completion after Turbo navigation", async () => {
     const documentListeners = new Map();
     const messages = [];
@@ -68,6 +107,58 @@ test("rechecks Exercism auto-completion after Turbo navigation", async () => {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(messages.length, 2);
     assert.equal(messages.every(message => message.type === "exercism-mark-complete"), true);
+});
+
+test("correlates auto-completion events without logging exercise content", async () => {
+    const events = [];
+    const messages = [];
+    const context = vm.createContext({
+        chrome: {
+            storage: { local: { get: async () => ({}) } },
+            runtime: {
+                sendMessage: async message => {
+                    messages.push(message);
+                    return { completed: true };
+                }
+            }
+        },
+        document: {
+            documentElement: {},
+            addEventListener() {},
+            querySelectorAll: () => [{
+                innerText: "Mark as complete",
+                offsetWidth: 100,
+                offsetHeight: 30,
+                disabled: false
+            }]
+        },
+        location: { href: "https://exercism.org/tracks/ruby/exercises/example" },
+        MutationObserver: class { observe() {} },
+        CodingSite2LlmDiagnostics: {
+            createOperationId: () => "completion-operation",
+            log: (...args) => events.push(args)
+        },
+        console
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
+            "utf8"
+        ),
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].operationId, "completion-operation");
+    assert.ok(events.some(([, operationId, stage]) =>
+        operationId === "completion-operation" && stage === "request.sent"
+    ));
+    assert.ok(events.some(([, operationId, stage]) =>
+        operationId === "completion-operation" && stage === "workflow.completed"
+    ));
+    assert.equal(JSON.stringify(events).includes("Boutique Inventory Improvements"), false);
 });
 
 test("waits on the editor page and handles Back to Exercise Turbo navigation", async () => {
@@ -442,13 +533,14 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
         ["exercism-mark-complete"]
     );
     assert.deepEqual(reloadedTabIds, [1, 3]);
-    assert.deepEqual(completionNotices, [{
-        tabId: 10,
-        message: {
-            type: "exercism-submitted-overview-completion-result",
-            completed: true
-        }
-    }]);
+    assert.equal(completionNotices.length, 1);
+    assert.equal(completionNotices[0].tabId, 10);
+    assert.equal(
+        completionNotices[0].message.type,
+        "exercism-submitted-overview-completion-result"
+    );
+    assert.equal(completionNotices[0].message.completed, true);
+    assert.equal(typeof completionNotices[0].message.operationId, "string");
     assert.ok(
         events.indexOf("completion-result-output") <
             events.indexOf("concepts-reloaded-after-result-1"),

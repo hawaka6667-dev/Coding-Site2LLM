@@ -139,6 +139,7 @@ test("loads worker state owners before the runtime coordinator", () => {
         "utf8"
     );
     const moduleOrder = [
+        "worker/diagnostics.js",
         "worker/state/return_route_store.js",
         "worker/workflows/smart_return_workflow.js",
         "worker/workflows/exercism_workflow.js",
@@ -151,6 +152,7 @@ test("loads worker state owners before the runtime coordinator", () => {
 
 test("documents worker owner boundaries in source headers", () => {
     const modules = [
+        "worker/diagnostics.js",
         "worker/state/return_route_store.ts",
         "worker/workflows/smart_return_workflow.ts",
         "worker/workflows/exercism_workflow.ts",
@@ -181,6 +183,7 @@ test("keeps extension commands and content scripts registered", () => {
         open_in_tab: true
     });
     assert.deepEqual(manifest.content_scripts[0].js, [
+        "worker/diagnostics.js",
         "worker/exercism/edit/content.js",
         "worker/exercism/edit/auto_submit_after_manual_run.js",
         "worker/exercism/edit/manage_submitted_exercism_overview_window.js",
@@ -190,6 +193,7 @@ test("keeps extension commands and content scripts registered", () => {
     assert.deepEqual(
         manifest.content_scripts[1].js,
         [
+            "worker/diagnostics.js",
             "worker/exercism/overview/open_exercise_in_editor.js",
             "worker/exercism/overview/auto_mark_exercise_complete.js",
             "worker/exercism/overview/dismiss_exercism_overview_closable_dialogs.js",

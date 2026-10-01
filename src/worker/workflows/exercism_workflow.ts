@@ -1,9 +1,7 @@
 /* @machine
 file: worker/workflows/exercism_workflow.js
-role: coordinate Exercism submission and submitted-overview lifecycle
-owns: per-tab submit deduplication, owned overview windows, Mark Complete and concepts refresh
-does_not_own: page selectors, editor DOM automation, send-context and Smart Return
-contract: validate sender and exercise path before creating or closing owned overview windows
+role: coordinate Exercism test-submit and submitted-overview window lifecycle
+contract: preserve per-tab submission deduplication and validate owned overview windows
 */
 
 const exercismSubmitPromises = new Map<number, Promise<void>>();
@@ -12,7 +10,8 @@ let submittedOverviewWindows: Record<string, string> | null = null;
 
 async function runExercismTestSubmit(
     tabId?: number,
-    options: { skipRun?: boolean } = {}
+    options: { skipRun?: boolean } = {},
+    operationId = (globalThis as any).CodingSite2LlmDiagnostics.createOperationId()
 ) {
     const currentTab = tabId
         ? await chrome.tabs.get(tabId)
@@ -22,19 +21,44 @@ async function runExercismTestSubmit(
         }))[0];
 
     if (!currentTab?.id) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-test-submit",
+            operationId,
+            "workflow.failed",
+            { reason: "tab-not-found" }
+        );
         throw new Error("Current tab not found.");
     }
 
     if (exercismSubmitPromises.has(currentTab.id)) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-test-submit",
+            operationId,
+            "workflow.skipped",
+            { reason: "already-running", tabId: currentTab.id }
+        );
         return exercismSubmitPromises.get(currentTab.id);
     }
 
+    const startedAt = performance.now();
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "exercism-test-submit",
+        operationId,
+        "workflow.started",
+        { tabId: currentTab.id, skipRun: options.skipRun === true }
+    );
     const promise = (async () => {
         const platform = getPlatform(currentTab.url);
         if (typeof platform.testAndSubmit !== "function") {
             throw new Error("Exercism test and submit is not supported on this page.");
         }
 
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-test-submit",
+            operationId,
+            "platform.selected",
+            { tabId: currentTab.id, platform: platform.name }
+        );
         await platform.testAndSubmit(currentTab.id, options);
     })();
 
@@ -42,6 +66,26 @@ async function runExercismTestSubmit(
 
     try {
         await promise;
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-test-submit",
+            operationId,
+            "workflow.completed",
+            {
+                tabId: currentTab.id,
+                durationMs: Math.round(performance.now() - startedAt)
+            }
+        );
+    } catch (error) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-test-submit",
+            operationId,
+            "workflow.failed",
+            {
+                tabId: currentTab.id,
+                errorName: error instanceof Error ? error.name : "UnknownError"
+            }
+        );
+        throw error;
     } finally {
         if (exercismSubmitPromises.get(currentTab.id) === promise) {
             exercismSubmitPromises.delete(currentTab.id);
@@ -194,14 +238,36 @@ async function reloadExercismConceptsForExercise(exerciseUrl: string) {
     return matchingTabs.length > 0;
 }
 
-async function markCompleteAndRefreshConcepts(tabId: number, exerciseUrl: string) {
+async function markCompleteAndRefreshConcepts(
+    tabId: number,
+    exerciseUrl: string,
+    operationId: string
+) {
     const platform = getPlatform(exerciseUrl);
     if (typeof platform.markComplete !== "function") {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-mark-complete",
+            operationId,
+            "workflow.skipped",
+            { reason: "unsupported-platform", tabId }
+        );
         return false;
     }
 
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "exercism-mark-complete",
+        operationId,
+        "completion.started",
+        { platform: platform.name, tabId }
+    );
     const completed = await platform.markComplete(tabId);
     if (completed !== true) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-mark-complete",
+            operationId,
+            "completion.not-confirmed",
+            { reason: "page-did-not-confirm", tabId }
+        );
         return false;
     }
 
@@ -209,10 +275,22 @@ async function markCompleteAndRefreshConcepts(tabId: number, exerciseUrl: string
         "exercismRefreshConceptsAfterComplete"
     );
     if (settings.exercismRefreshConceptsAfterComplete === false) {
+        (globalThis as any).CodingSite2LlmDiagnostics.log(
+            "exercism-mark-complete",
+            operationId,
+            "completion.confirmed",
+            { platform: platform.name, tabId }
+        );
         return true;
     }
 
-    await reloadExercismConceptsForExercise(exerciseUrl);
+    const refreshed = await reloadExercismConceptsForExercise(exerciseUrl);
+    (globalThis as any).CodingSite2LlmDiagnostics.log(
+        "exercism-mark-complete",
+        operationId,
+        "completion.confirmed",
+        { platform: platform.name, tabId, result: refreshed ? "concepts-refreshed" : "no-concepts-tab" }
+    );
     return true;
 }
 
@@ -222,18 +300,29 @@ function handleExercismWorkflowMessage(
     sendResponse: (response?: unknown) => void
 ): boolean | null {
     if (message?.type === "exercism-test-submit") {
-        runExercismTestSubmit(sender.tab?.id).catch(error => {
-            console.error("[exercism] test and submit ERROR:", error);
+        const diagnostics = (globalThis as any).CodingSite2LlmDiagnostics;
+        const operationId = message.operationId || diagnostics.createOperationId();
+        diagnostics.log("exercism-test-submit", operationId, "trigger.received", {
+            tabId: sender.tab?.id
+        });
+        runExercismTestSubmit(sender.tab?.id, {}, operationId).catch(error => {
+            console.error(`[Exercism][${operationId}] test and submit ERROR:`, error);
         });
         return false;
     }
 
     if (message?.type === "exercism-run-tests-clicked") {
         const tabId = sender.tab?.id;
+        const diagnostics = (globalThis as any).CodingSite2LlmDiagnostics;
+        const operationId = message.operationId || diagnostics.createOperationId();
+        diagnostics.log("exercism-test-submit", operationId, "trigger.received", {
+            tabId,
+            reason: "manual-test-run"
+        });
 
         if (tabId) {
-            runExercismTestSubmit(tabId, { skipRun: true }).catch(error => {
-                console.error("[exercism] manual test and submit ERROR:", error);
+            runExercismTestSubmit(tabId, { skipRun: true }, operationId).catch(error => {
+                console.error(`[Exercism][${operationId}] manual test and submit ERROR:`, error);
             });
         }
 
@@ -264,27 +353,39 @@ function handleExercismWorkflowMessage(
         return null;
     }
 
+    const diagnostics = (globalThis as any).CodingSite2LlmDiagnostics;
+    const operationId = message.operationId || diagnostics.createOperationId();
+    diagnostics.log("exercism-mark-complete", operationId, "trigger.received", {
+        tabId: sender.tab?.id
+    });
     const tabId = sender.tab?.id;
     if (!tabId) {
-        console.error("[exercism] mark complete ERROR: sender tab not found.");
+        diagnostics.log("exercism-mark-complete", operationId, "workflow.failed", {
+            reason: "sender-tab-not-found"
+        });
         sendResponse({ completed: false });
         return false;
     }
 
-    markCompleteAndRefreshConcepts(tabId, sender.tab.url)
+    markCompleteAndRefreshConcepts(tabId, sender.tab.url, operationId)
         .then(completed => {
             sendResponse({ completed });
             if (completed && typeof chrome.tabs.sendMessage === "function") {
                 chrome.tabs.sendMessage(tabId, {
                     type: "exercism-submitted-overview-completion-result",
-                    completed: true
+                    completed: true,
+                    operationId
                 }).catch(error => {
-                    console.error("[exercism] overview completion notice ERROR:", error);
+                    console.error(`[Exercism][${operationId}] completion notice ERROR:`, error);
                 });
             }
         })
         .catch(error => {
-            console.error("[exercism] mark complete ERROR:", error);
+            diagnostics.log("exercism-mark-complete", operationId, "workflow.failed", {
+                tabId,
+                errorName: error instanceof Error ? error.name : "UnknownError"
+            });
+            console.error(`[Exercism][${operationId}] mark complete ERROR:`, error);
             sendResponse({ completed: false });
         });
     return true;
