@@ -82,4 +82,16 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to publish GitHub release $tag."
 }
 
-Write-Host "Published ${tag}: $(gh release view $tag --json url --jq .url)"
+$releaseUrl = gh release view $tag --json url --jq .url
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseUrl)) {
+    Write-Warning "Release $tag was published, but its URL could not be retrieved."
+    $releaseUrl = "(URL unavailable)"
+}
+
+Write-Host ""
+Write-Host "Release complete"
+Write-Host "Version: $tag"
+Write-Host "Tests: passed (npm run test:release)"
+Write-Host "Uploaded CRX: $crxPath"
+Write-Host "Generated ZIP (local only): $zipPath"
+Write-Host "Release URL: $releaseUrl"

@@ -25,6 +25,7 @@ test("uses the version policy documented in helper.md", () => {
     const builder = fs.readFileSync(path.join(ROOT_DIR, ".build", "build-extension.js"), "utf8");
     const packager = fs.readFileSync(path.join(ROOT_DIR, ".build", "package.ps1"), "utf8");
     const versionManager = fs.readFileSync(path.join(ROOT_DIR, ".build", "version.ps1"), "utf8");
+    const releaseScript = fs.readFileSync(path.join(ROOT_DIR, ".build", "release.ps1"), "utf8");
     const tasks = readJson(".vscode/tasks.json");
 
     assert.match(helper, /Every delivered change increments the four-part extension version/);
@@ -58,6 +59,11 @@ test("uses the version policy documented in helper.md", () => {
     assert.ok(tasks.tasks.some((task) => task.label === "Version: +0.001 (Batch)" && task.script === "version:batch"));
     assert.ok(tasks.tasks.some((task) => task.label === "Version: +0.01 (Minor)" && task.script === "version:minor"));
     assert.match(versionManager, /ValidateSet\("Change", "Batch", "Minor", "Major"\)/);
+    assert.match(releaseScript, /Write-Host "Release complete"/);
+    assert.match(releaseScript, /Write-Host "Tests: passed \(npm run test:release\)"/);
+    assert.match(releaseScript, /Write-Host "Uploaded CRX: \$crxPath"/);
+    assert.match(releaseScript, /Write-Host "Generated ZIP \(local only\): \$zipPath"/);
+    assert.match(releaseScript, /Write-Host "Release URL: \$releaseUrl"/);
     assert.doesNotMatch(versionManager, /Assert-VersionTagAvailable|\$Action/);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "version.ps1")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "package.ps1")), true);
