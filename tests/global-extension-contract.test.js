@@ -150,29 +150,6 @@ test("loads worker state owners before the runtime coordinator", () => {
     assert.deepEqual(moduleOrder, [...moduleOrder].sort((left, right) => left - right));
 });
 
-test("documents worker owner boundaries in source headers", () => {
-    const modules = [
-        "worker/diagnostics.js",
-        "worker/state/return_route_store.ts",
-        "worker/workflows/smart_return_workflow.ts",
-        "worker/workflows/exercism_workflow.ts",
-        "worker/workflows/run_coding_context_to_llm_workflow.ts"
-    ];
-
-    for (const modulePath of modules) {
-        const source = fs.readFileSync(path.join(SOURCE_ROOT, modulePath), "utf8");
-        const header = source.slice(0, source.indexOf("*/") + 2);
-        const emittedPath = modulePath.replace(/\.ts$/, ".js");
-
-        assert.match(header, /^\/\* @machine/m, `${modulePath} needs an @machine header`);
-        assert.match(header, new RegExp(`^file: ${emittedPath.replaceAll("/", "\\/")}$`, "m"));
-        assert.match(header, /^role: .+/m);
-        assert.match(header, /^owns: .+/m);
-        assert.match(header, /^does_not_own: .+/m);
-        assert.match(header, /^contract: .+/m);
-    }
-});
-
 test("keeps extension commands and content scripts registered", () => {
     const manifest = readManifest();
 

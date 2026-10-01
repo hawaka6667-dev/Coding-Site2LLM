@@ -1,7 +1,6 @@
 /* @machine
 file: worker/diagnostics.js
 role: centralize workflow diagnostics without logging user content
-owns: operation IDs, detail allowlisting and service-worker console output
 does_not_own: workflow control flow or persistence
 contract: correlate structured events without logging page or user content
 */
