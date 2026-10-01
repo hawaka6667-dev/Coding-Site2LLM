@@ -119,7 +119,7 @@ async function runWorkflowOnce(selectedText = "", operationId: string) {
         await getSelectedLlmProvider()
     );
     const deepSeekTab = llm.tab;
-    await saveReturnRoute({
+    await SmartReturn.routes.save({
         windowId: currentTab.windowId,
         sourceTabId: currentTab.id,
         llmTabId: deepSeekTab.id,
@@ -233,7 +233,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (command === "send-context") {
                 await runWorkflow(message.selectedText, operationId);
             } else if (command === "smart-return" && tab) {
-                await runSmartReturn(tab, operationId);
+                await SmartReturn.run(tab, operationId);
             }
         })().catch(error => {
             console.error("[workflow] ERROR:", error);
@@ -264,7 +264,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message?.type === "llm-copy") {
-        recordLlmCopy(sender.tab?.id, message.text).catch(error => {
+        SmartReturn.recordCopy(sender.tab?.id, message.text).catch(error => {
             console.error("[llm] copy tracking ERROR:", error);
         });
         return;

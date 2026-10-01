@@ -80,12 +80,14 @@ Coding-Site2LLM/
 │       ├── llm_copy_tracker.js
 │       ├── manage_icon_theme.ts
 │       ├── route_coding_page_and_build_llm_prompt.ts
-│       ├── state/
-│       │   └── return_route_store.ts
 │       ├── workflows/
+│       │   ├── smart_return/
+│       │   │   ├── code_transfer.ts
+│       │   │   ├── route_lifecycle.ts
+│       │   │   ├── route_store.ts
+│       │   │   └── smart_return_workflow.ts
 │       │   ├── exercism_workflow.ts
-│       │   ├── run_coding_context_to_llm_workflow.ts
-│       │   └── smart_return_workflow.ts
+│       │   └── run_coding_context_to_llm_workflow.ts
 │       └── runtime_types.d.ts
 ├── tests/
 │   ├── dev-check.ps1

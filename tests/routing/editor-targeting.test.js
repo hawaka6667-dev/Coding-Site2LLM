@@ -1,6 +1,6 @@
 /* @machine
 file: tests/routing/editor-targeting.test.js
-role: verify coding-tab and active-editor targeting
+role: verify active-editor targeting
 run: npm run test:routing
 */
 
@@ -9,29 +9,34 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { loadRoutingWorker } = require("../worker-test-harness.js");
 
-test("Smart Return skips a LeetCode submissions tab and targets the problem editor", () => {
-    const context = loadRoutingWorker();
+test("does not activate a replacement tab when the recorded source tab is gone", async () => {
     const tabs = [
-        { id: 1, index: 0, url: "https://chat.deepseek.com/" },
-        {
-            id: 2,
-            index: 1,
-            url: "https://leetcode.com/problems/dota2-senate/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75"
-        },
-        {
-            id: 3,
-            index: 2,
-            url: "https://leetcode.com/problems/dota2-senate/?envType=study-plan-v2&envId=leetcode-75"
-        }
+        { id: 1, windowId: 7, index: 0, url: "https://chat.deepseek.com/" },
+        { id: 2, windowId: 7, index: 1, url: "https://leetcode.com/problems/two-sum/" }
     ];
+    const context = loadRoutingWorker({ tabs });
+    const activatedTabIds = [];
+    context.chrome.tabs.update = async tabId => activatedTabIds.push(tabId);
 
-    assert.equal(
-        vm.runInContext(
-            "findRightCodingTab(tabs, tabs[0], 'LeetCode').id",
-            vm.createContext({ ...context, tabs })
-        ),
-        3
-    );
+    await context.SmartReturn.routes.save({
+        windowId: 7,
+        llmTabId: 1,
+        sourceTabId: null,
+        sourceUrl: "https://leetcode.com/problems/two-sum/",
+        sourcePlatform: "LeetCode",
+        sourceIdentity: "LeetCode:two-sum",
+        status: "orphaned",
+        copied: true,
+        copiedText: "return 42;"
+    });
+
+    await context.SmartReturn.run(tabs[0], "operation-1");
+
+    assert.deepEqual(activatedTabIds, []);
+    const route = await context.SmartReturn.routes.get(7, 1);
+    assert.equal(route.status, "orphaned");
+    assert.equal(route.copied, true);
+    assert.equal(route.copiedText, "return 42;");
 });
 
 test("writes returned code to the active LeetCode editor after switching list problems", async () => {

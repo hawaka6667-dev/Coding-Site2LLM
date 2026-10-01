@@ -14,13 +14,13 @@ Apply this workflow to the repository in the current workspace. Discover its con
 
 This repository manages the extension version in `src/manifest.json` with `.build/version.ps1`:
 
-```powershell
-npm run version -- -Action Get
-npm run version -- -Action Bump -Level Change
-npm run version -- -Action Validate
+```sh
+npm run version
+npm run version:batch
+npm run version:minor
 ```
 
-`Bump` defaults to `Change`; supported levels are `Change`, `Batch`, `Minor`, and `Major`, following the increments documented in `helper.md`. `Validate` checks the four-part format and that the matching `v<version>` Git tag is unused. The script changes only the manifest version; it does not commit, tag, push, or publish.
+`npm run version` increments the final `change` segment. Use `npm run version:batch` or `npm run version:minor` for those larger increments. For a major increment, run `powershell -ExecutionPolicy Bypass -File .build/version.ps1 -Level Major`. The script accepts only `-Level` (`Change`, `Batch`, `Minor`, or `Major`); it has no `-Action` parameter and only updates the manifest version. It does not inspect Git tags, commit, tag, push, or publish. Run `npm run test:version` after the bump to build and verify the version contract against the latest release tag.
 
 ## Workflow
 

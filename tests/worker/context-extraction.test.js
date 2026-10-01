@@ -178,7 +178,7 @@ test("sends selected text instead of page context and keeps full context as the 
     context.insertText = async (_tabId, prompt) => context.insertedPrompts.push(prompt);
     context.keyTap = async () => {};
     context.scrollUp = async () => {};
-    context.saveReturnRoute = async () => {};
+    context.SmartReturn.routes.save = async () => {};
     vm.runInContext(`LeetCodeAdapter.getContext = async () => {
         contextReads += 1;
         return {

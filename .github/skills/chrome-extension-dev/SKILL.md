@@ -30,11 +30,8 @@ description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome ext
 
 先确认 Chrome MCP 已连接，并通过 `list_pages` 成功获取当前标签页。若 MCP 未连接或无法成功列出标签页，停止 reload/refresh 并如实报告连接阻塞；不得把连接失败描述为没有可访问页面，也不得伪造已完成的浏览器刷新。
 
-1. 使用 Chrome DevTools MCP 的 `reload_extension` 重载扩展。
-2. 随后快速刷新当前浏览器中所有已打开标签页
-3. 若用户明确要求 reload，即使当前改动范围不明显，也应执行扩展 reload 并刷新所有已打开标签页；不要处理或改写页面内容。
+使用 Chrome DevTools MCP 的 `reload_extension` 重载扩展。
 
-没有修改 unpacked extension 的纯文档、测试或分析阶段，不必为了形式执行浏览器 reload/refresh。不要把 refresh 扩展成页面内容保护、保存或恢复任务。
 
 ## 项目验证命令
 

@@ -25,6 +25,7 @@ test("uses the version policy documented in helper.md", () => {
     const builder = fs.readFileSync(path.join(ROOT_DIR, ".build", "build-extension.js"), "utf8");
     const packager = fs.readFileSync(path.join(ROOT_DIR, ".build", "package.ps1"), "utf8");
     const versionManager = fs.readFileSync(path.join(ROOT_DIR, ".build", "version.ps1"), "utf8");
+    const versionSkill = fs.readFileSync(path.join(ROOT_DIR, ".github", "skills", "version-management", "SKILL.md"), "utf8");
     const releaseScript = fs.readFileSync(path.join(ROOT_DIR, ".build", "release.ps1"), "utf8");
     const tasks = readJson(".vscode/tasks.json");
 
@@ -56,6 +57,11 @@ test("uses the version policy documented in helper.md", () => {
         packageJson.scripts["version:minor"],
         "powershell -ExecutionPolicy Bypass -File .build/version.ps1 -Level Minor"
     );
+    assert.match(versionSkill, /npm run version\r?\n/);
+    assert.match(versionSkill, /npm run version:batch/);
+    assert.match(versionSkill, /npm run version:minor/);
+    assert.match(versionSkill, /-Level Major/);
+    assert.doesNotMatch(versionSkill, /npm run version\s+--\s+-Action/);
     assert.ok(tasks.tasks.some((task) => task.label === "Version: +0.001 (Batch)" && task.script === "version:batch"));
     assert.ok(tasks.tasks.some((task) => task.label === "Version: +0.01 (Minor)" && task.script === "version:minor"));
     assert.match(versionManager, /ValidateSet\("Change", "Batch", "Minor", "Major"\)/);

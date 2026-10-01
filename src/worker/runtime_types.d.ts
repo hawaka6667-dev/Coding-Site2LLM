@@ -50,17 +50,3 @@ interface CodingSiteAdapter {
     testAndSubmit?(tabId: number, options?: { skipRun?: boolean }): Promise<boolean | void>;
     markComplete?(tabId: number): Promise<boolean>;
 }
-
-interface CodingSiteReturnRoute {
-    windowId: number;
-    llmTabId: number;
-    sourceTabId?: number;
-    sourceUrl?: string;
-    sourcePlatform?: string;
-    sourceIdentity?: string;
-    routeRevision?: number;
-    status?: string;
-    copied?: boolean;
-    copiedText?: string;
-    [key: string]: unknown;
-}

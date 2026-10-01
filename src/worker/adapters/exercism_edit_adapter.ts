@@ -23,6 +23,41 @@ const ExercismAdapter: CodingSiteAdapter = {
         return EXERCISM_URL.test(url);
     },
 
+    async replaceCode(tabId, text) {
+        const replaced = await executePage(tabId, async value => {
+            const deadline = Date.now() + 5000;
+
+            while (Date.now() < deadline) {
+                const editor = document.querySelector(
+                    '.cm-editor .cm-content[contenteditable="true"]'
+                );
+
+                if (editor && editor.offsetWidth > 0 && editor.offsetHeight > 0) {
+                    editor.focus();
+                    document.execCommand("selectAll", false);
+
+                    if (document.execCommand("insertText", false, value)) {
+                        editor.dispatchEvent(new InputEvent("input", {
+                            bubbles: true,
+                            inputType: "insertText",
+                            data: value
+                        }));
+                        editor.dispatchEvent(new Event("change", { bubbles: true }));
+                        return true;
+                    }
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            return false;
+        }, [text]);
+
+        if (replaced !== true) {
+            throw new Error("Could not replace code in the Exercism editor.");
+        }
+    },
+
     async testAndSubmit(tabId, { skipRun = false } = {}) {
         // Page functions passed to executePage must stay self-contained.
         // Use Exercism's own footer hooks:

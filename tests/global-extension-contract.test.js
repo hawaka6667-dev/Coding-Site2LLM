@@ -133,21 +133,24 @@ test("keeps TypeScript output in dist instead of beside source files", () => {
     }
 });
 
-test("loads worker state owners before the runtime coordinator", () => {
+test("loads Smart Return modules before the runtime coordinator", () => {
     const background = fs.readFileSync(
         path.join(SOURCE_ROOT, "background.ts"),
         "utf8"
     );
     const moduleOrder = [
         "worker/diagnostics.js",
-        "worker/state/return_route_store.js",
-        "worker/workflows/smart_return_workflow.js",
+        "worker/workflows/smart_return/route_store.js",
+        "worker/workflows/smart_return/route_lifecycle.js",
+        "worker/workflows/smart_return/code_transfer.js",
+        "worker/workflows/smart_return/smart_return_workflow.js",
         "worker/workflows/exercism_workflow.js",
         "worker/workflows/run_coding_context_to_llm_workflow.js"
     ].map(file => background.indexOf(`"${file}"`));
 
     assert.ok(moduleOrder.every(index => index >= 0));
     assert.deepEqual(moduleOrder, [...moduleOrder].sort((left, right) => left - right));
+    assert.doesNotMatch(background, /worker\/workflows\/smart_return\/target_selection\.js/);
 });
 
 test("keeps extension commands and content scripts registered", () => {

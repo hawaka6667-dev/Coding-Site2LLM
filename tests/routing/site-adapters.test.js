@@ -25,6 +25,58 @@ test("routes supported exercise pages to their adapters", () => {
     }));
 });
 
+test("writes returned code through Exercism's CodeMirror input path", async () => {
+    const context = loadRoutingWorker();
+    const commands = [];
+    const events = [];
+    const editor = {
+        offsetWidth: 600,
+        offsetHeight: 300,
+        focus() {
+            events.push("focus");
+        },
+        dispatchEvent(event) {
+            events.push(event.type);
+        }
+    };
+    context.document = {
+        querySelector(selector) {
+            assert.equal(
+                selector,
+                '.cm-editor .cm-content[contenteditable="true"]'
+            );
+            return editor;
+        },
+        execCommand(...args) {
+            commands.push(args);
+            return true;
+        }
+    };
+    context.InputEvent = class InputEvent {
+        constructor(type) {
+            this.type = type;
+        }
+    };
+    context.Event = class Event {
+        constructor(type) {
+            this.type = type;
+        }
+    };
+    context.executePage = async (_tabId, pageFunction, args = []) =>
+        pageFunction(...args);
+
+    await vm.runInContext(
+        "getPlatform('https://exercism.org/tracks/typescript/exercises/react/edit').replaceCode(10, 'const answer = 42;')",
+        context
+    );
+
+    assert.deepEqual(commands, [
+        ["selectAll", false],
+        ["insertText", false, "const answer = 42;"]
+    ]);
+    assert.deepEqual(events, ["focus", "input", "change"]);
+});
+
 test("falls back to raw source for unrelated HTTP pages and rejects view-source pages", () => {
     const context = loadRoutingWorker();
 

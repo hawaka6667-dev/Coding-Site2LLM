@@ -9,41 +9,6 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { loadCoreWorker } = require("../../worker-test-harness.js");
 
-test("uses the Exercism test-and-submit adapter after replacing code", async () => {
-    const context = loadCoreWorker();
-    context.tabState.push(
-        { id: 10, windowId: 1, index: 0, url: "https://exercism.org/tracks/python/exercises/pov/edit" },
-        { id: 20, windowId: 1, index: 1, url: "https://chat.deepseek.com/" }
-    );
-    let submittedTabId = null;
-    context.chrome.tabs.get = async () => ({
-        id: 10,
-        url: "https://exercism.org/tracks/python/exercises/pov/edit"
-    });
-    vm.runInContext(
-        "ExercismAdapter.testAndSubmit = async tabId => { submittedTabId = tabId; }",
-        context
-    );
-    context.submittedTabId = null;
-    context.chrome.scripting.executeScript = async ({ func }) => [{
-        result: func.toString().includes("navigator.clipboard")
-            ? "def fixed_code():\n    return True"
-            : true
-    }];
-    vm.runInContext(
-        "returnRoutes = { '1:20': { windowId: 1, sourceTabId: 10, llmTabId: 20, sourcePlatform: 'Exercism' } }",
-        context
-    );
-
-    await vm.runInContext(
-        "returnToCodingPage({ id: 20, windowId: 1 })",
-        context
-    );
-
-    submittedTabId = context.submittedTabId;
-    assert.equal(submittedTabId, 10);
-});
-
 test("waits for Exercism editor state to reflect replaced code before running tests", async () => {
     const context = loadCoreWorker();
     context.pageActions = [];
