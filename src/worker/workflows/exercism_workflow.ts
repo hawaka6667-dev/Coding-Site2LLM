@@ -117,30 +117,37 @@ async function persistSubmittedOverviewWindows(windows: Record<string, string>) 
 
 async function createSubmittedOverviewWindow(
     senderTab: chrome.tabs.Tab,
-    overviewUrl: string
+    overviewUrl: string,
+    editorUrlValue = senderTab.url || ""
 ) {
     if (!senderTab?.id || typeof senderTab.url !== "string") {
         return false;
     }
 
     try {
-        const editorUrl = new URL(senderTab.url);
+        const senderUrl = new URL(senderTab.url);
+        const editorUrl = new URL(editorUrlValue, senderTab.url);
         const targetUrl = new URL(overviewUrl, senderTab.url);
-        const exercisePath = editorUrl.pathname.match(
+        const editorPathMatch = editorUrl.pathname.match(
             /^\/tracks\/[^/]+\/exercises\/[^/]+\/edit\/?$/
         );
+        const editorPath = editorUrl.pathname.replace(/\/$/, "");
+        const overviewPath = editorPath.replace(/\/edit$/, "");
+        const senderPath = senderUrl.pathname.replace(/\/$/, "");
 
         if (
-            editorUrl.origin !== "https://exercism.org" ||
-            targetUrl.origin !== editorUrl.origin ||
-            !exercisePath ||
-            targetUrl.pathname !== exercisePath[0].replace(/\/edit\/?$/, "")
+            senderUrl.origin !== "https://exercism.org" ||
+            editorUrl.origin !== senderUrl.origin ||
+            targetUrl.origin !== senderUrl.origin ||
+            !editorPathMatch ||
+            targetUrl.pathname !== overviewPath ||
+            ![editorPath, overviewPath].includes(senderPath)
         ) {
             return false;
         }
 
         const createdWindow = await chrome.windows.create({
-            url: targetUrl.href,
+            url: "about:blank",
             focused: false
         });
 
@@ -149,10 +156,20 @@ async function createSubmittedOverviewWindow(
         }
 
         const windows = await loadSubmittedOverviewWindows();
-        windows[String(createdWindow.id)] = targetUrl.pathname;
+        const windowKey = String(createdWindow.id);
+        windows[windowKey] = targetUrl.pathname;
         try {
             await persistSubmittedOverviewWindows(windows);
+            const [createdTab] = await chrome.tabs.query({
+                windowId: createdWindow.id
+            });
+            if (!Number.isInteger(createdTab?.id)) {
+                throw new Error("Submitted overview tab was not created.");
+            }
+            await chrome.tabs.update(createdTab.id, { url: targetUrl.href });
         } catch (_) {
+            delete windows[windowKey];
+            await persistSubmittedOverviewWindows(windows).catch(() => {});
             await chrome.windows.remove(createdWindow.id).catch(() => {});
             return false;
         }
@@ -330,7 +347,11 @@ function handleExercismWorkflowMessage(
     }
 
     if (message?.type === "exercism-create-submitted-overview-window") {
-        createSubmittedOverviewWindow(sender.tab, message.overviewUrl)
+        createSubmittedOverviewWindow(
+            sender.tab,
+            message.overviewUrl,
+            message.editorUrl
+        )
             .then(opened => sendResponse({ opened }))
             .catch(error => {
                 console.error("[exercism] overview window create ERROR:", error);

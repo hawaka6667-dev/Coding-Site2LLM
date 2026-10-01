@@ -166,7 +166,7 @@ test("keeps extension commands and content scripts registered", () => {
         "worker/diagnostics.js",
         "worker/exercism/edit/content.js",
         "worker/exercism/edit/auto_submit_after_manual_run.js",
-        "worker/exercism/edit/manage_submitted_exercism_overview_window.js",
+        "worker/exercism/submitted_overview/open_submitted_overview_after_submit.js",
         "worker/exercism/edit/continue_after_exercism_modals.js",
         "worker/exercism/overview/auto_mark_exercise_complete.js"
     ]);
@@ -176,8 +176,7 @@ test("keeps extension commands and content scripts registered", () => {
             "worker/diagnostics.js",
             "worker/exercism/overview/open_exercise_in_editor.js",
             "worker/exercism/overview/auto_mark_exercise_complete.js",
-            "worker/exercism/overview/dismiss_exercism_overview_closable_dialogs.js",
-            "worker/exercism/edit/manage_submitted_exercism_overview_window.js"
+            "worker/exercism/submitted_overview/close_submitted_overview_after_completion.js"
         ]
     );
     assert.equal(manifest.commands?.["exercism-test-submit"], undefined);

@@ -54,8 +54,8 @@ test("returns to the same Exercism editor after the submitted overview window op
                 ROOT_DIR,
                 "worker",
                 "exercism",
-                "edit",
-                "manage_submitted_exercism_overview_window.js"
+                "submitted_overview",
+                "open_submitted_overview_after_submit.js"
             ),
             "utf8"
         ),
@@ -92,7 +92,8 @@ test("returns to the same Exercism editor after the submitted overview window op
     ]);
     assert.equal(JSON.stringify(messages), JSON.stringify([{
         type: "exercism-create-submitted-overview-window",
-        overviewUrl: "https://exercism.org/tracks/python/exercises/pov?from=editor"
+        overviewUrl: "https://exercism.org/tracks/python/exercises/pov?from=editor",
+        editorUrl: "https://exercism.org/tracks/python/exercises/pov/edit"
     }]));
 
     const nextOverviewVisit = {
@@ -129,4 +130,68 @@ test("returns to the same Exercism editor after the submitted overview window op
         "https://exercism.org/tracks/python/exercises/pov/edit"
     ]);
     assert.equal(messages.length, 2);
+});
+
+test("returns to the overview when automatic completion is disabled", async () => {
+    const listeners = [];
+    const replacements = [];
+    const messages = [];
+    const backToExerciseLink = {
+        innerText: "Back to Exercise",
+        href: "https://exercism.org/tracks/python/exercises/pov?from=editor",
+        offsetWidth: 100,
+        offsetHeight: 20,
+        getAttribute: () => null
+    };
+    const context = vm.createContext({
+        URL,
+        Date,
+        document: {
+            addEventListener: (type, listener) => listeners.push({ type, listener }),
+            querySelectorAll: () => [backToExerciseLink]
+        },
+        chrome: {
+            storage: { local: { get: async () => ({ exercismAutoMarkComplete: false }) } },
+            runtime: {
+                onMessage: { addListener() {} },
+                sendMessage: message => {
+                    messages.push(message);
+                    return Promise.resolve({ opened: true });
+                }
+            }
+        },
+        location: {
+            href: "https://exercism.org/tracks/python/exercises/pov/edit",
+            replace: url => replacements.push(url)
+        }
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(
+                ROOT_DIR,
+                "worker",
+                "exercism",
+                "submitted_overview",
+                "open_submitted_overview_after_submit.js"
+            ),
+            "utf8"
+        ),
+        context
+    );
+
+    listeners.find(listener => listener.type === "click").listener({
+        target: { closest: () => ({ disabled: false }) }
+    });
+    const overviewVisit = {
+        detail: { url: "https://exercism.org/tracks/python/exercises/pov" },
+        prevented: false,
+        preventDefault() { this.prevented = true; }
+    };
+    listeners.find(listener => listener.type === "turbo:before-visit").listener(overviewVisit);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(overviewVisit.prevented, true);
+    assert.deepEqual(replacements, [backToExerciseLink.href]);
+    assert.deepEqual(messages, []);
 });

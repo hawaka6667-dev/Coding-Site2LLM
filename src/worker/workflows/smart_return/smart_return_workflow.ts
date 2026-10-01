@@ -54,16 +54,13 @@ namespace SmartReturn {
         const targetTab = sourceTab;
 
         if (!targetTab?.id) {
-            const orphanedRoute = await routes.updateIfCurrent(route, {
-                sourceTabId: null,
-                status: "orphaned"
-            });
+            const cleared = await routes.clearIfCurrent(route);
             (globalThis as any).CodingSite2LlmDiagnostics.log(
                 "smart-return",
                 operationId,
-                "workflow.skipped",
+                cleared ? "route.invalidated" : "workflow.skipped",
                 {
-                    reason: orphanedRoute ? "source-tab-unavailable" : "route-changed",
+                    reason: cleared ? "source-tab-unavailable" : "route-changed",
                     sourceTabId: route.sourceTabId
                 }
             );

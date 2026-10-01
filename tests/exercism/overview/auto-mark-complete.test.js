@@ -14,7 +14,13 @@ const { ROOT_DIR, loadRoutingWorker, loadExercismOverviewScript } = require("../
 test("overview automation scripts can coexist in the shared extension world", () => {
     const scriptPaths = [
         path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
-        path.join(ROOT_DIR, "worker", "exercism", "edit", "manage_submitted_exercism_overview_window.js")
+        path.join(
+            ROOT_DIR,
+            "worker",
+            "exercism",
+            "submitted_overview",
+            "close_submitted_overview_after_completion.js"
+        )
     ];
 
     for (const orderedPaths of [scriptPaths, [...scriptPaths].reverse()]) {
@@ -48,6 +54,61 @@ test("overview automation scripts can coexist in the shared extension world", ()
             }
         });
     }
+});
+
+test("requests an owned overview close only after confirmed completion", () => {
+    let onMessage;
+    const messages = [];
+    const context = vm.createContext({
+        chrome: {
+            runtime: {
+                onMessage: { addListener: listener => { onMessage = listener; } },
+                sendMessage: message => {
+                    messages.push(message);
+                    return Promise.resolve({ closed: true });
+                }
+            }
+        },
+        location: {
+            href: "https://exercism.org/tracks/go/exercises/lasagna?from=submit"
+        }
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(
+                ROOT_DIR,
+                "worker",
+                "exercism",
+                "submitted_overview",
+                "close_submitted_overview_after_completion.js"
+            ),
+            "utf8"
+        ),
+        context
+    );
+
+    onMessage({
+        type: "exercism-submitted-overview-completion-result",
+        completed: false
+    });
+    context.location.href =
+        "https://exercism.org/tracks/go/exercises/lasagna/edit";
+    onMessage({
+        type: "exercism-submitted-overview-completion-result",
+        completed: true
+    });
+    context.location.href =
+        "https://exercism.org/tracks/go/exercises/lasagna?from=submit";
+    onMessage({
+        type: "exercism-submitted-overview-completion-result",
+        completed: true
+    });
+
+    assert.deepEqual(
+        messages.map(message => message.type),
+        ["exercism-close-submitted-overview-window"]
+    );
 });
 
 test("rechecks Exercism auto-completion after Turbo navigation", async () => {

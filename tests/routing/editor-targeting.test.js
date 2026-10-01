@@ -9,10 +9,11 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { loadRoutingWorker } = require("../worker-test-harness.js");
 
-test("does not activate a replacement tab when the recorded source tab is gone", async () => {
+test("clears a closed source route without activating a replacement tab", async () => {
     const tabs = [
         { id: 1, windowId: 7, index: 0, url: "https://chat.deepseek.com/" },
-        { id: 2, windowId: 7, index: 1, url: "https://leetcode.com/problems/two-sum/" }
+        { id: 2, windowId: 7, index: 1, url: "https://leetcode.com/problems/two-sum/" },
+        { id: 3, windowId: 7, index: 2, url: "https://leetcode.com/problems/two-sum/" }
     ];
     const context = loadRoutingWorker({ tabs });
     const activatedTabIds = [];
@@ -21,22 +22,20 @@ test("does not activate a replacement tab when the recorded source tab is gone",
     await context.SmartReturn.routes.save({
         windowId: 7,
         llmTabId: 1,
-        sourceTabId: null,
+        sourceTabId: 2,
         sourceUrl: "https://leetcode.com/problems/two-sum/",
         sourcePlatform: "LeetCode",
         sourceIdentity: "LeetCode:two-sum",
-        status: "orphaned",
+        status: "routed",
         copied: true,
         copiedText: "return 42;"
     });
+    await context.SmartReturn.routes.removeTab(2, 7);
 
     await context.SmartReturn.run(tabs[0], "operation-1");
 
     assert.deepEqual(activatedTabIds, []);
-    const route = await context.SmartReturn.routes.get(7, 1);
-    assert.equal(route.status, "orphaned");
-    assert.equal(route.copied, true);
-    assert.equal(route.copiedText, "return 42;");
+    assert.equal(await context.SmartReturn.routes.get(7, 1), null);
 });
 
 test("writes returned code to the active LeetCode editor after switching list problems", async () => {

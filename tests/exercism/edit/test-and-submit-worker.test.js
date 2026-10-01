@@ -87,3 +87,41 @@ test("deduplicates Exercism test-and-submit requests per tab", async () => {
 
     assert.equal(context.submissionCalls, 1);
 });
+
+test("submits after a passing run without relying on feedback modal copy", async () => {
+    const context = loadCoreWorker();
+    context.pageActions = [];
+    vm.runInContext(`
+        let timestamp = 0;
+        performance.now = () => (timestamp += 1000);
+        sleep = async () => {};
+        executePage = async (_tabId, pageFunction) => {
+            const source = pageFunction.toString();
+            if (source.includes("const runTests =")) {
+                return {
+                    editor: true,
+                    runTestsDisabled: true,
+                    submitDisabled: false,
+                    running: false,
+                    failed: false
+                };
+            }
+            if (source.includes(".submit-btn button")) {
+                pageActions.push("submit");
+                return { ok: true };
+            }
+            if (source.includes("continue without waiting")) {
+                return { dismissed: true, leftEditor: false };
+            }
+            return true;
+        };
+    `, context);
+
+    const result = await vm.runInContext(
+        "ExercismAdapter.testAndSubmit(7, { skipRun: true })",
+        context
+    );
+
+    assert.equal(result, true);
+    assert.deepEqual(context.pageActions, ["submit"]);
+});

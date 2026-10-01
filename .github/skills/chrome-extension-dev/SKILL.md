@@ -35,6 +35,8 @@ description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome ext
 
 ## 项目验证命令
 
+跑通 causal chain之前不要写 tests；否则 test suite 可能成为错误模型的锁
+
 按改动职责选择最小验证：
 
 - prompt、页面上下文和反馈清理：`node --test tests/worker/context-extraction.test.js`

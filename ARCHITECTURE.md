@@ -1,5 +1,6 @@
 # Architecture
 //This document lists the project directory structure and file names only.
+//暂时停更改为手动
 
 ```text
 Coding-Site2LLM/
@@ -67,11 +68,12 @@ Coding-Site2LLM/
 │       │   ├── edit/
 │       │   │   ├── auto_submit_after_manual_run.js
 │       │   │   ├── content.js
-│       │   │   ├── continue_after_exercism_modals.js
-│       │   │   └── manage_submitted_exercism_overview_window.js
+│       │   │   └── continue_after_exercism_modals.js
+│       │   ├── submitted_overview/
+│       │   │   ├── close_submitted_overview_after_completion.js
+│       │   │   └── open_submitted_overview_after_submit.js
 │       │   └── overview/
 │       │       ├── auto_mark_exercise_complete.js
-│       │       ├── dismiss_exercism_overview_closable_dialogs.js
 │       │       └── open_exercise_in_editor.js
 │       ├── configure_supported_coding_sites_and_llm_providers.ts
 │       ├── find_llm_tab_and_insert_prompt.ts
@@ -99,9 +101,9 @@ Coding-Site2LLM/
 │   │   │   └── test-and-submit-worker.test.js
 │   │   ├── overview/
 │   │   │   ├── auto-mark-complete.test.js
-│   │   │   ├── dismiss-closable-dialogs.test.js
 │   │   │   └── open-exercise-in-editor.test.js
-│   │   ├── submission-workflow.test.js
+│   │   ├── submitted-overview/
+│   │   │   └── window-lifecycle.test.js
 │   │   └── track-list-scroll.test.js
 │   ├── global-extension-contract.test.js
 │   ├── worker-test-harness.js

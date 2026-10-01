@@ -128,19 +128,11 @@ namespace SmartReturn {
                 let changed = false;
 
                 for (const [key, route] of Object.entries(routes)) {
-                    if (route.llmTabId === tabId) {
+                    if (
+                        route.llmTabId === tabId ||
+                        (route.sourceTabId === tabId && route.windowId === windowId)
+                    ) {
                         delete routes[key];
-                        changed = true;
-                        continue;
-                    }
-
-                    if (route.sourceTabId === tabId && route.windowId === windowId) {
-                        routes[key] = {
-                            ...route,
-                            sourceTabId: null,
-                            status: "orphaned",
-                            routeRevision: ++this.revision
-                        };
                         changed = true;
                     }
                 }
