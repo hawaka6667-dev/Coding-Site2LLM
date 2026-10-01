@@ -1,3 +1,4 @@
+VS Code tasks `Version: +0.001 (Batch)` and `Version: +0.01 (Minor)` directly apply those increments through `.build/version.ps1`; each checks that the resulting Git tag is unused before updating `src/manifest.json`.
 # Coding Site2LLM
 
 这是一个 Chrome extension：从当前 coding site 提取 problem context，组装 prompt，并把 prompt 交给用户已打开的 LLM page。

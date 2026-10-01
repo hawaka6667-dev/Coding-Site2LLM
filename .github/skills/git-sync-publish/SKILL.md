@@ -21,12 +21,12 @@ npm run sync
 
 ## 项目快速发布
 
-用户在本项目要求 `publish`、`release` 或“发版”时，目标默认是仓库配置的 GitHub Release，不要再询问发布平台。优先使用项目脚本，不要重复手工运行脚本已经包含的检查。
+用户在本项目要求 `publish`、`release` 或“发版”时，目标默认是仓库配置的 GitHub Release，不要再询问发布平台。直接使用项目发布脚本；不要在运行脚本前手工检查分支、工作区、版本或 tag，也不要手工重演脚本已实现的步骤。
 
 ### 发布流程
 
-1. 确认当前分支为 `main`。从 `src/manifest.json` 读取版本，并确认版本 tag 未指向其它 commit；若已占用，按 `helper.md` 的版本策略递增并验证。
-2. 按下方顺序直接运行两个命令；只有 `sync` 成功后才继续 `release`。发布脚本负责 release tests、打包、版本 tag 和 GitHub Release；不要重复运行其内部检查。
+1. 直接运行 `npm run sync`。
+2. 只有 `sync` 成功后，再运行 `npm run release`。
 
 `publish` 就是 `sync` 后接 `release`
 
@@ -35,6 +35,6 @@ npm run sync
 npm run release
 ```
 
-项目脚本会运行 `test:release`、生成 CRX/ZIP、推送 `main`、创建或推送版本 tag，并上传 CRX 到 GitHub Release。不要先重复运行 `test:release` 或 `package:crx`，除非正在定位失败；脚本会再次执行这些步骤。
+`release.ps1` 会自行验证当前分支为 `main`、工作区无未提交变更、GitHub CLI 已认证，并检查版本 tag 是否指向当前 commit；之后运行 `test:release`、打包 CRX/ZIP、推送 `main` 和版本 tag，再创建或更新 GitHub Release 并上传 CRX。不要预先重复这些检查、手动递增版本，或另行运行 `test:release` / `package:crx`。
 
-发布完成后汇报 Release URL、版本、资产和测试结果。
+遇到任一脚本失败、认证问题或 Git 冲突时，立即停止并报告脚本输出，不自行覆盖、丢弃或 force push。简报

@@ -9,9 +9,18 @@ Apply this workflow to the repository in the current workspace. Discover its con
 
 ## When to Use
 
-- The user asks to bump, choose, inspect, or validate a version.
-- A release, package, or deployment needs a version decision.
-- The user asks whether a change warrants a version update.
+
+## Repository Version Commands
+
+This repository manages the extension version in `src/manifest.json` with `.build/version.ps1`:
+
+```powershell
+npm run version -- -Action Get
+npm run version -- -Action Bump -Level Change
+npm run version -- -Action Validate
+```
+
+`Bump` defaults to `Change`; supported levels are `Change`, `Batch`, `Minor`, and `Major`, following the increments documented in `helper.md`. `Validate` checks the four-part format and that the matching `v<version>` Git tag is unused. The script changes only the manifest version; it does not commit, tag, push, or publish.
 
 ## Workflow
 

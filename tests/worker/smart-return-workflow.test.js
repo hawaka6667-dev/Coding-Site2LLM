@@ -256,6 +256,52 @@ test("preserves a newer return route when an earlier Smart Return finishes", asy
     assert.equal(route.copiedText, "second code");
 });
 
+test("does not orphan a newer route when an earlier return finds no target", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push({
+        id: 20,
+        windowId: 1,
+        index: 0,
+        url: "https://chat.deepseek.com/"
+    });
+    let finishTabQuery;
+    context.chrome.tabs.query = () => new Promise(resolve => {
+        finishTabQuery = resolve;
+    });
+    vm.runInContext(`returnRoutes = { "1:20": {
+        windowId: 1, sourceTabId: 10, llmTabId: 20,
+        sourcePlatform: "Web source", sourceUrl: "https://example.com/first",
+        sourceIdentity: "https://example.com/first", copied: true, copiedText: "first code"
+    } }`, context);
+
+    const firstRun = vm.runInContext(
+        "runSmartReturn({ id: 20, windowId: 1 })",
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    await vm.runInContext(`saveReturnRoute({
+        windowId: 1, sourceTabId: 11, llmTabId: 20,
+        sourcePlatform: "Web source", sourceUrl: "https://example.com/second",
+        sourceIdentity: "https://example.com/second",
+        copied: true, copiedText: "second code", status: "routed"
+    })`, context);
+
+    finishTabQuery([{
+        id: 20,
+        windowId: 1,
+        index: 0,
+        url: "https://chat.deepseek.com/"
+    }]);
+    await firstRun;
+
+    const route = vm.runInContext("returnRoutes['1:20']", context);
+    assert.equal(route.sourceTabId, 11);
+    assert.equal(route.sourceUrl, "https://example.com/second");
+    assert.equal(route.copied, true);
+    assert.equal(route.copiedText, "second code");
+});
+
 test("does not overwrite a route replaced while Smart Return selects its target", async () => {
     const context = loadCoreWorker();
     context.tabState.push(

@@ -24,6 +24,8 @@ test("uses the version policy documented in helper.md", () => {
     const packageJson = readJson("package.json");
     const builder = fs.readFileSync(path.join(ROOT_DIR, ".build", "build-extension.js"), "utf8");
     const packager = fs.readFileSync(path.join(ROOT_DIR, ".build", "package.ps1"), "utf8");
+    const versionManager = fs.readFileSync(path.join(ROOT_DIR, ".build", "version.ps1"), "utf8");
+    const tasks = readJson(".vscode/tasks.json");
 
     assert.match(helper, /Every delivered change increments the four-part extension version/);
     assert.match(helper, /four-part extension version `major\.minor\.batch\.change`/);
@@ -41,6 +43,23 @@ test("uses the version policy documented in helper.md", () => {
         packageJson.scripts.release,
         "powershell -ExecutionPolicy Bypass -File .build/release.ps1"
     );
+    assert.equal(
+        packageJson.scripts.version,
+        "powershell -ExecutionPolicy Bypass -File .build/version.ps1 -Level Change"
+    );
+    assert.equal(
+        packageJson.scripts["version:batch"],
+        "powershell -ExecutionPolicy Bypass -File .build/version.ps1 -Level Batch"
+    );
+    assert.equal(
+        packageJson.scripts["version:minor"],
+        "powershell -ExecutionPolicy Bypass -File .build/version.ps1 -Level Minor"
+    );
+    assert.ok(tasks.tasks.some((task) => task.label === "Version: +0.001 (Batch)" && task.script === "version:batch"));
+    assert.ok(tasks.tasks.some((task) => task.label === "Version: +0.01 (Minor)" && task.script === "version:minor"));
+    assert.match(versionManager, /ValidateSet\("Change", "Batch", "Minor", "Major"\)/);
+    assert.doesNotMatch(versionManager, /Assert-VersionTagAvailable|\$Action/);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "version.ps1")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "package.ps1")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, ".build", "release.ps1")), true);
     assert.equal(

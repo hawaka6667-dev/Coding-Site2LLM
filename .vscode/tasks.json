@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Version: +0.001 (Batch)",
+      "type": "npm",
+      "script": "version:batch",
+      "problemMatcher": []
+    },
+    {
+      "label": "Version: +0.01 (Minor)",
+      "type": "npm",
+      "script": "version:minor",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 file: worker/workflows/smart_return_workflow.js
 role: serialize Smart Return cycles and write copied code to the maintained source tab
 contract: finish or fail the current cycle before allowing another on the same LLM tab
+warning: Coordinate cycle changes with worker/state/return_route_store.ts; guard every write based on a captured route revision
 */
 
 const smartReturnPromises = new Map<string, Promise<void>>();
@@ -175,12 +176,18 @@ async function returnToCodingPage(
         );
 
     if (!targetTab) {
-        await saveReturnRoute({ ...route, sourceTabId: null, status: "orphaned" });
+        const orphanedRoute = await saveReturnRouteIfCurrent(route, {
+            sourceTabId: null,
+            status: "orphaned"
+        });
         (globalThis as any).CodingSite2LlmDiagnostics.log(
             "smart-return",
             operationId,
             "workflow.skipped",
-            { reason: "no-matching-target", platform: targetPlatform }
+            {
+                reason: orphanedRoute ? "no-matching-target" : "route-changed",
+                platform: targetPlatform
+            }
         );
         return;
     }

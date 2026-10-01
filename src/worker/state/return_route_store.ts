@@ -2,6 +2,7 @@
 file: worker/state/return_route_store.js
 role: persist return routes and maintain their source-tab identity
 contract: a Smart Return may consume only the route revision it captured
+warning: Coordinate route maintenance changes with worker/workflows/smart_return_workflow.ts; never write a captured route without its revision guard
 */
 
 let returnRoutes: Record<string, CodingSiteReturnRoute> | null = null;
