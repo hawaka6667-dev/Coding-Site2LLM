@@ -40,10 +40,11 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | --- | --- | --- |
 | prompt、site context | `src/worker/adapters/` | `npm run test:unit` |
 | URL routing 和 site routing | `src/worker/route_coding_page_and_build_llm_prompt.ts` | `npm run test:routing` |
-| Exercism overview redirect and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js` | `npm run test:routing` 和 `npm run test:contracts` |
+| Exercism overview redirect and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js`, `src/worker/workflows/exercism_workflow.ts` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `src/worker/exercism/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
-| Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js` | `npm run test:routing` |
-| Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/run_coding_context_to_llm_workflow.ts` | `npm run test:unit` |
+| Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/workflows/smart_return_workflow.ts`, `src/worker/workflows/exercism_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/edit/manage_submitted_exercism_overview_window.js` | `npm run test:routing` |
+| Smart Return route maintenance and code write-back | `src/worker/state/return_route_store.ts`, `src/worker/workflows/smart_return_workflow.ts`, `src/worker/adapters/` | `npm run test:unit` |
+| Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/workflows/smart_return_workflow.ts` | `npm run test:unit` |
 | Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/exercism/edit/continue-dialogs.test.js` | `npm run test:unit` |
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
 | extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
@@ -161,7 +162,7 @@ smart-return  : LLM page -> source coding page
 
 LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当前 coding 页记录为该 LLM 页的当前返回页；来源页关闭后，返回动作会从该 LLM 页右侧选择第一个同平台的做题页。没有匹配页时不跳转，也不清除已记录的复制文本。
 
-返回路由是用户通过 `send-context`（默认 Alt+Q；popup 使用同一 workflow）明确建立的维护授权，按 `windowId + llmTabId` 关联到发送时的 source tab、URL 和题目身份。硬导航、History API 和 hash 导航都按站点身份比较；同题 URL 变化保留维护，身份变化删除整条路由和旧复制 payload。Smart Return 执行前再次比较当前 source 身份，阻止导航事件竞态把旧 payload 写入新题。
+返回路由是用户通过 `send-context`（默认 Alt+Q；popup 使用同一 workflow）明确建立的维护授权，按 `windowId + llmTabId` 关联到发送时的 source tab、URL 和题目身份。硬导航、History API 和 hash 导航都按站点身份比较；同题 URL 变化保留维护，身份变化删除整条路由和旧复制 payload。失效前必须回查 source tab 当前 URL；若它已不同于导航事件 URL，则忽略过期通知。Smart Return 执行前再次比较当前 source 身份，阻止导航事件竞态把旧 payload 写入新题。
 
 | 站点 | 维护身份 | 编辑目标约束 |
 | --- | --- | --- |
@@ -176,11 +177,11 @@ LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当�
 
 发送、复制、回跳不是一次性的线性脚本，而是同一 LLM tab 上可反复执行的独立 cycle。任何跨页面 workflow 都必须显式定义 `idle -> captured -> consuming -> idle` 的状态转换，以及 success、failure、cancel 和无目标页各自的终态；不能只实现首次成功路径后留下 in-flight flag、缓存文本或页面状态给下一次调用复用。
 
-Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payload；找到目标页后，无论代码写入、测试或提交成功或失败，payload 都必须在 `finally` 中消费并清空，下一次回跳只可使用新的复制事件。仅在没有匹配目标页时保留 payload，避免用户关闭来源页后丢失尚未消费的复制内容。扩展 reload、Service Worker 重启和页面 Turbo 导航都必须按这个 lifecycle 恢复可用状态，不能让上一轮的 payload 意外进入下一轮。
+Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payload；找到目标页后，无论代码写入、测试或提交成功或失败，都在 `finally` 中尝试消费本轮 payload。所有基于 route 快照的异步写入都必须比较持久化 revision，包括首次保存目标 `sourceTabId/status`、记录 copy payload 和最终清理；若新题或新复制已更新 route，旧 cycle 不得覆盖新 route 或清空新 payload。首次目标更新发现 revision 不匹配时，本轮必须在导航或写代码前退出。仅在没有匹配目标页时保留尚未消费的 payload。扩展 reload、Service Worker 重启和页面 Turbo 导航都必须按这个 lifecycle 恢复可用状态，不能让上一轮的 payload 意外进入下一轮。
 
 同一个 LLM tab 的 Smart Return 必须串行到当前异步 cycle 完成，按键释放不代表回跳流程完成；不同 LLM tab 可独立运行。`Web source` 的 Smart Return 只可返回到完整 URL identity 相同的 HTTP(S) 页面，不得退回到任意网页。
 
-测试必须至少覆盖同一 tab 的两轮连续 workflow，以及第一轮在写入、运行或提交阶段失败后第二轮仍能正常开始；不要只用单次成功断言证明 workflow 正确。
+测试必须至少覆盖同一 tab 的两轮连续 workflow、第一轮失败后第二轮仍能开始，以及第一轮尚未收尾时新 route 已写入且旧 finalizer 不得覆盖它；不要只用单次成功断言证明 workflow 正确。
 
 ### 模块边界
 
@@ -189,7 +190,10 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `worker/adapters/*_adapter.ts` | 每个站点独立负责页面提取、过滤、编辑器回写和站点内测试提交 | 其它站点 selector、跨页面导航策略 |
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
 | `find_llm_tab_and_insert_prompt.js` | 找到指定 provider 并插入 prompt | 站点状态判断 |
-| `run_coding_context_to_llm_workflow.js` | 串联发送流程、保存返回路由；校验提交 overview 生命周期请求并执行 Chrome 窗口/标签 API | 站点专属 selector、决定何时打开或关闭 overview |
+| `worker/state/return_route_store.ts` | 按 `windowId + llmTabId` 持久化返回路由和复制 payload；监听来源身份变化与标签关闭；提供 revision-guarded 更新和 payload consumption | 选择回跳目标、编辑器写入和提交 |
+| `worker/workflows/smart_return_workflow.ts` | 串行执行 Smart Return，校验 source 身份，选择匹配页面，回填并提交复制代码；基于捕获 revision 更新目标状态和消费 payload | 发送 prompt、route 持久化、Exercism overview 生命周期 |
+| `worker/workflows/exercism_workflow.ts` | 协调 Exercism test-submit、受管 overview 窗口、Mark as complete 和 concepts 刷新 | 页面 selector 和 overview/edit 页面状态判断 |
+| `worker/workflows/run_coding_context_to_llm_workflow.ts` | 捕获 coding context、建立发送来源 route、选择 LLM 并发送 prompt；维护快捷键锁和 runtime message dispatch | route 持久化实现、Smart Return 回填、Exercism 窗口生命周期 |
 | `edit/manage_submitted_exercism_overview_window.js` | 由 edit 提交流程发起，决定同题 overview 是否在未聚焦独立窗口打开；成功完成后请求关闭自己登记的 overview | 直接调用 Chrome 窗口 API、普通 overview 进入编辑器策略 |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 在 overview URL 发现可用的 `Mark as complete` 并请求完成链；也预先注入 Exercism `/edit` 文档以监听返回 overview 的 Turbo 导航 | 是否进入 `/edit` |

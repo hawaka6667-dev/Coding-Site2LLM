@@ -2,6 +2,7 @@
 file: tests/worker/smart-return-workflow.test.js
 role: verify Smart Return copy, return, and code-write lifecycle
 run: npm run test:unit
+建议：可以多加几个，不止两个
 */
 
 const assert = require("node:assert/strict");
@@ -209,6 +210,125 @@ test("does not overlap Smart Return cycles for the same LLM tab", async () => {
     await firstRun;
 
     assert.equal(submitCount, 1);
+});
+
+test("preserves a newer return route when an earlier Smart Return finishes", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 1, url: "https://example.com/first" },
+        { id: 11, windowId: 1, index: 2, url: "https://example.com/second" },
+        { id: 20, windowId: 1, index: 0, url: "https://chat.deepseek.com/" }
+    );
+    context.readClipboard = async () => "";
+    context.chrome.tabs.update = async () => {};
+    context.replaceCode = async () => {};
+    let finishFirstSubmit;
+    context.submitReturnedCode = () => new Promise(resolve => {
+        finishFirstSubmit = resolve;
+    });
+    vm.runInContext(`returnRoutes = { "1:20": {
+        windowId: 1, sourceTabId: 10, llmTabId: 20,
+        sourcePlatform: "Web source", sourceUrl: "https://example.com/first",
+        sourceIdentity: "https://example.com/first", copied: true, copiedText: "first code"
+    } }`, context);
+
+    const firstRun = vm.runInContext(
+        "runSmartReturn({ id: 20, windowId: 1 })",
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof finishFirstSubmit, "function");
+
+    await vm.runInContext(`saveReturnRoute({
+        windowId: 1, sourceTabId: 11, llmTabId: 20,
+        sourcePlatform: "Web source", sourceUrl: "https://example.com/second",
+        sourceIdentity: "https://example.com/second",
+        copied: true, copiedText: "second code", status: "routed"
+    })`, context);
+
+    finishFirstSubmit();
+    await firstRun;
+
+    const route = vm.runInContext("returnRoutes['1:20']", context);
+    assert.equal(route.sourceTabId, 11);
+    assert.equal(route.sourceUrl, "https://example.com/second");
+    assert.equal(route.copied, true);
+    assert.equal(route.copiedText, "second code");
+});
+
+test("does not overwrite a route replaced while Smart Return selects its target", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 1, url: "https://example.com/first" },
+        { id: 11, windowId: 1, index: 2, url: "https://example.com/second" },
+        { id: 20, windowId: 1, index: 0, url: "https://chat.deepseek.com/" }
+    );
+    context.readClipboard = async () => "";
+    const updates = [];
+    context.chrome.tabs.update = async (...args) => updates.push(args);
+    let finishTabQuery;
+    context.chrome.tabs.query = () => new Promise(resolve => {
+        finishTabQuery = () => resolve(context.tabState);
+    });
+    vm.runInContext(`returnRoutes = { "1:20": {
+        windowId: 1, sourceTabId: 10, llmTabId: 20,
+        sourcePlatform: "Web source", sourceUrl: "https://example.com/first",
+        sourceIdentity: "https://example.com/first", copied: true, copiedText: "first code"
+    } }`, context);
+    await vm.runInContext(`saveReturnRoute(returnRoutes["1:20"])`, context);
+
+    const firstRun = vm.runInContext(
+        "runSmartReturn({ id: 20, windowId: 1 })",
+        context
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof finishTabQuery, "function");
+
+    await vm.runInContext(`saveReturnRoute({
+        ...returnRoutes["1:20"], sourceTabId: 11,
+        sourceUrl: "https://example.com/second",
+        sourceIdentity: "https://example.com/second",
+        copied: true, copiedText: "second code"
+    })`, context);
+    finishTabQuery();
+    await firstRun;
+
+    const route = vm.runInContext("returnRoutes['1:20']", context);
+    assert.equal(route.sourceTabId, 11);
+    assert.equal(route.sourceUrl, "https://example.com/second");
+    assert.equal(route.copiedText, "second code");
+    assert.deepEqual(updates, []);
+});
+
+test("runs sequential Smart Return cycles with a fresh route and payload", async () => {
+    const context = loadCoreWorker();
+    context.tabState.push(
+        { id: 10, windowId: 1, index: 1, url: "https://example.com/first" },
+        { id: 11, windowId: 1, index: 2, url: "https://example.com/second" },
+        { id: 20, windowId: 1, index: 0, url: "https://chat.deepseek.com/" }
+    );
+    const writes = [];
+    context.readClipboard = async () => "";
+    context.chrome.tabs.update = async () => {};
+    context.replaceCode = async (tabId, text) => writes.push([tabId, text]);
+    context.submitReturnedCode = async () => {};
+    vm.runInContext(`returnRoutes = { "1:20": {
+        windowId: 1, sourceTabId: 10, llmTabId: 20,
+        sourcePlatform: "Web source", sourceUrl: "https://example.com/first",
+        sourceIdentity: "https://example.com/first", copied: true, copiedText: "first code"
+    } }`, context);
+
+    await vm.runInContext("runSmartReturn({ id: 20, windowId: 1 })", context);
+    await vm.runInContext(`saveReturnRoute({
+        ...returnRoutes["1:20"], sourceTabId: 11,
+        sourceUrl: "https://example.com/second",
+        sourceIdentity: "https://example.com/second",
+        copied: true, copiedText: "second code"
+    })`, context);
+    await vm.runInContext("runSmartReturn({ id: 20, windowId: 1 })", context);
+
+    assert.deepEqual(writes, [[10, "first code"], [11, "second code"]]);
+    assert.equal(vm.runInContext("returnRoutes['1:20'].copied", context), false);
 });
 
 test("clears consumed LLM copy when Smart Return submission fails", async () => {

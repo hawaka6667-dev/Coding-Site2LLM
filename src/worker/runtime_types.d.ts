@@ -58,6 +58,7 @@ interface CodingSiteReturnRoute {
     sourceUrl?: string;
     sourcePlatform?: string;
     sourceIdentity?: string;
+    routeRevision?: number;
     status?: string;
     copied?: boolean;
     copiedText?: string;

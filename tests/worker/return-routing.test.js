@@ -11,6 +11,7 @@ const { loadCoreWorker } = require("../worker-test-harness.js");
 
 test("keeps LeetCode maintenance across same-problem routes and clears it on a new problem", async () => {
     const context = loadCoreWorker();
+    context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
     const route = {
         windowId: 1,
         sourceTabId: 10,
@@ -20,6 +21,7 @@ test("keeps LeetCode maintenance across same-problem routes and clears it on a n
         copied: true,
         copiedText: "old problem answer"
     };
+    context.tabState.push({ id: 10, windowId: 1, url: route.sourceUrl });
     context.route = route;
     vm.runInContext("returnRoutes = { '1:20': route }", context);
 
@@ -34,10 +36,12 @@ test("keeps LeetCode maintenance across same-problem routes and clears it on a n
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
 
+    const sameProblemUrl = "https://leetcode.com/problems/two-sum/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75";
+    context.tabState[0].url = sameProblemUrl;
     context.historyStateUpdatedListeners[0]({
         tabId: 10,
         frameId: 0,
-        url: "https://leetcode.com/problems/two-sum/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75"
+        url: sameProblemUrl
     }, {
         id: 10,
         windowId: 1,
@@ -45,12 +49,14 @@ test("keeps LeetCode maintenance across same-problem routes and clears it on a n
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
 
+    const nextProblemUrl = "https://leetcode.com/problems/maximum-subarray/";
+    context.tabState[0].url = nextProblemUrl;
     context.tabUpdatedListeners[0](10, {
-        url: "https://leetcode.com/problems/maximum-subarray/"
+        url: nextProblemUrl
     }, {
         id: 10,
         windowId: 1,
-        url: "https://leetcode.com/problems/maximum-subarray/"
+        url: nextProblemUrl
     });
     await new Promise(resolve => setImmediate(resolve));
 
@@ -74,6 +80,7 @@ test("keeps LeetCode maintenance across same-problem routes and clears it on a n
 
 test("clears maintained return routes when History API navigation changes the exercise", async () => {
     const context = loadCoreWorker();
+    context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
     const route = {
         windowId: 1,
         sourceTabId: 10,
@@ -81,6 +88,11 @@ test("clears maintained return routes when History API navigation changes the ex
         sourcePlatform: "Exercism",
         sourceUrl: "https://exercism.org/tracks/go/exercises/lasagna/edit"
     };
+    context.tabState.push({
+        id: 10,
+        windowId: 1,
+        url: "https://exercism.org/tracks/go/exercises/freelancer/edit"
+    });
     context.route = route;
     vm.runInContext("returnRoutes = { '1:20': route }", context);
 
@@ -94,8 +106,32 @@ test("clears maintained return routes when History API navigation changes the ex
     assert.equal(vm.runInContext("returnRoutes['1:20']", context), undefined);
 });
 
+test("ignores a stale navigation event when the source tab already matches the new route", async () => {
+    const context = loadCoreWorker();
+    const currentUrl = "https://exercism.org/tracks/ruby/exercises/last-will/edit";
+    const staleUrl = "https://exercism.org/tracks/ruby/exercises/chess-game/edit";
+    const route = {
+        windowId: 1,
+        sourceTabId: 10,
+        llmTabId: 20,
+        sourcePlatform: "Exercism",
+        sourceUrl: currentUrl,
+        sourceIdentity: "Exercism:ruby:last-will"
+    };
+    context.tabState.push({ id: 10, windowId: 1, url: currentUrl });
+    context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
+    context.route = route;
+    vm.runInContext("returnRoutes = { '1:20': route }", context);
+
+    context.tabUpdatedListeners[0](10, { url: staleUrl });
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(vm.runInContext("returnRoutes['1:20']", context), route);
+});
+
 test("keeps Exercism overview maintenance when the same exercise moves into edit", async () => {
     const context = loadCoreWorker();
+    context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
     const route = {
         windowId: 1,
         sourceTabId: 10,
@@ -103,6 +139,11 @@ test("keeps Exercism overview maintenance when the same exercise moves into edit
         sourcePlatform: "Exercism overview",
         sourceUrl: "https://exercism.org/tracks/go/exercises/lasagna"
     };
+    context.tabState.push({
+        id: 10,
+        windowId: 1,
+        url: "https://exercism.org/tracks/go/exercises/lasagna/edit"
+    });
     context.route = route;
     vm.runInContext("returnRoutes = { '1:20': route }", context);
 
@@ -160,6 +201,7 @@ test("Smart Return resolves an Exercism overview route to its matching editor", 
 
 test("keeps a maintained return route on a hash change within the same Codewars kata", async () => {
     const context = loadCoreWorker();
+    context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
     const route = {
         windowId: 1,
         sourceTabId: 10,
@@ -167,6 +209,11 @@ test("keeps a maintained return route on a hash change within the same Codewars 
         sourcePlatform: "Codewars",
         sourceUrl: "https://www.codewars.com/kata/example/train/javascript"
     };
+    context.tabState.push({
+        id: 10,
+        windowId: 1,
+        url: `${route.sourceUrl}#solution`
+    });
     context.route = route;
     vm.runInContext("returnRoutes = { '1:20': route }", context);
 

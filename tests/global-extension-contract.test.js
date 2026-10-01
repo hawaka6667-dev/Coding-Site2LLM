@@ -133,6 +133,44 @@ test("keeps TypeScript output in dist instead of beside source files", () => {
     }
 });
 
+test("loads worker state owners before the runtime coordinator", () => {
+    const background = fs.readFileSync(
+        path.join(SOURCE_ROOT, "background.ts"),
+        "utf8"
+    );
+    const moduleOrder = [
+        "worker/state/return_route_store.js",
+        "worker/workflows/smart_return_workflow.js",
+        "worker/workflows/exercism_workflow.js",
+        "worker/workflows/run_coding_context_to_llm_workflow.js"
+    ].map(file => background.indexOf(`"${file}"`));
+
+    assert.ok(moduleOrder.every(index => index >= 0));
+    assert.deepEqual(moduleOrder, [...moduleOrder].sort((left, right) => left - right));
+});
+
+test("documents worker owner boundaries in source headers", () => {
+    const modules = [
+        "worker/state/return_route_store.ts",
+        "worker/workflows/smart_return_workflow.ts",
+        "worker/workflows/exercism_workflow.ts",
+        "worker/workflows/run_coding_context_to_llm_workflow.ts"
+    ];
+
+    for (const modulePath of modules) {
+        const source = fs.readFileSync(path.join(SOURCE_ROOT, modulePath), "utf8");
+        const header = source.slice(0, source.indexOf("*/") + 2);
+        const emittedPath = modulePath.replace(/\.ts$/, ".js");
+
+        assert.match(header, /^\/\* @machine/m, `${modulePath} needs an @machine header`);
+        assert.match(header, new RegExp(`^file: ${emittedPath.replaceAll("/", "\\/")}$`, "m"));
+        assert.match(header, /^role: .+/m);
+        assert.match(header, /^owns: .+/m);
+        assert.match(header, /^does_not_own: .+/m);
+        assert.match(header, /^contract: .+/m);
+    }
+});
+
 test("keeps extension commands and content scripts registered", () => {
     const manifest = readManifest();
 
@@ -310,7 +348,7 @@ test("keeps the popup LLM provider setting wired to the worker", () => {
         "utf8"
     );
     const workflowSource = fs.readFileSync(
-        path.join(ROOT_DIR, "worker", "run_coding_context_to_llm_workflow.js"),
+        path.join(ROOT_DIR, "worker", "workflows", "run_coding_context_to_llm_workflow.js"),
         "utf8"
     );
 
@@ -357,8 +395,8 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
         ),
         "utf8"
     );
-    const workflowSource = fs.readFileSync(
-        path.join(ROOT_DIR, "worker", "run_coding_context_to_llm_workflow.js"),
+    const exercismWorkflowSource = fs.readFileSync(
+        path.join(ROOT_DIR, "worker", "workflows", "exercism_workflow.js"),
         "utf8"
     );
     const testAndSubmit = editAdapterSource.slice(
@@ -374,7 +412,7 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
     // ends must keep spelling that same type.
     const markCompleteMessageType = /"exercism-mark-complete"/;
     assert.match(markCompleteSource, markCompleteMessageType);
-    assert.match(workflowSource, markCompleteMessageType);
+    assert.match(exercismWorkflowSource, markCompleteMessageType);
 });
 
 test("continues past Exercism's automated-feedback check without waiting", () => {

@@ -14,5 +14,8 @@ importScripts(
     "worker/adapters/exercism_overview_adapter.js",
     "worker/route_coding_page_and_build_llm_prompt.js",
     "worker/find_llm_tab_and_insert_prompt.js",
-    "worker/run_coding_context_to_llm_workflow.js"
+    "worker/state/return_route_store.js",
+    "worker/workflows/smart_return_workflow.js",
+    "worker/workflows/exercism_workflow.js",
+    "worker/workflows/run_coding_context_to_llm_workflow.js"
 );
