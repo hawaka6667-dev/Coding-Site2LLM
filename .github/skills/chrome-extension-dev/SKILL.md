@@ -40,7 +40,10 @@ description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome ext
 
 按改动职责选择最小验证：
 
-- prompt、页面上下文和反馈清理：`npm run test:unit`
-- URL、provider 和站点路由：`npm run test:routing`
-- manifest、脚本注入与扩展资源契约：`npm run test:contracts`
+- prompt、页面上下文和反馈清理：`node --test tests/worker/context-extraction.test.js`
+- 站点 URL 和 adapter 识别：`node --test tests/routing/site-adapters.test.js`
+- LLM provider 选择和位置：`node --test tests/routing/llm-provider-selection.test.js`
+- coding tab 和 editor targeting：`node --test tests/routing/coding-tab-selection.test.js tests/routing/editor-targeting.test.js`
+- return route 和 Smart Return：`node --test tests/worker/return-routing.test.js tests/worker/smart-return-workflow.test.js`
+- manifest、脚本注入和资源契约：`node --test --test-name-pattern="injects the shortcut bridge|keeps local resources referenced by extension HTML|keeps extension commands and content scripts registered" tests/global-extension-contract.test.js`
 - 开发入口和环境检查：`npm run dev:check`

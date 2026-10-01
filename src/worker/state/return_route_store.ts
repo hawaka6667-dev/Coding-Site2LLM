@@ -1,9 +1,7 @@
 /* @machine
 file: worker/state/return_route_store.js
-role: own persisted return-route state and source-navigation invalidation
-owns: keyed route persistence, revision compare-and-save, copy-payload recording and cleanup
-does_not_own: Smart Return targeting, source editor writes, code submission
-contract: mutate a route snapshot only when its persisted revision still matches
+role: persist return routes and maintain their source-tab identity
+contract: a Smart Return may consume only the route revision it captured
 */
 
 let returnRoutes: Record<string, CodingSiteReturnRoute> | null = null;
