@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Coding Site2LLM",
-  "version": "0.5.7.0",
+  "version": "0.5.7.1",
   "description": "Capture coding-site context and send it to an LLM.",
   "icons": {
     "128": "icons/icon128.png"
@@ -59,8 +59,7 @@
       "js": [
         "worker/diagnostics.js",
         "worker/exercism/overview/open_exercise_in_editor.js",
-        "worker/exercism/overview/auto_mark_exercise_complete.js",
-        "worker/exercism/submitted_overview/close_submitted_overview_after_completion.js"
+        "worker/exercism/overview/auto_mark_exercise_complete.js"
       ],
       "run_at": "document_start"
     },

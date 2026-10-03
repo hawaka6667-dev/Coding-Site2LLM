@@ -213,7 +213,6 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `worker/sqlbolt/run_query.js` | 仅在 SQLBolt lesson 的编辑器聚焦时，将 Ctrl+Enter 转发到同一编辑器容器的 `RUN QUERY` 链接 | SQLBolt 页面以外的快捷键、其它站点编辑器 |
 | `worker/workflows/exercism_workflow.ts` | 协调 Exercism test-submit、受管 overview 窗口、Mark as complete 和 concepts 刷新 | 页面 selector 和 overview/edit 页面状态判断 |
 | `submitted_overview/open_submitted_overview_after_submit.js` | 仅在 edit 页捕获 Submit；提交后的 Turbo 导航目标为同题 overview 或同题 `/edit` 时，按设置请求创建不抢焦点的 overview 窗口，并保留原标签页中的 editor | Chrome 窗口 API、overview 完成和普通 overview 路由 |
-| `submitted_overview/close_submitted_overview_after_completion.js` | 仅在 overview 页收到完成成功通知后请求关闭受管窗口 | 判断完成结果、直接调用 Chrome 窗口 API、普通 overview 弹窗 |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 在 overview URL 发现可用的 `Mark as complete` 并请求完成链；也预先注入 Exercism `/edit` 文档以监听返回 overview 的 Turbo 导航 | 是否进入 `/edit` |
 | `auto_submit_after_manual_run.js` | 监听用户 Run Tests 并请求提交链 | overview 跳转和完成按钮 |
@@ -254,7 +253,7 @@ Exercism 的 Turbo 导航不会按目标 URL 重新注入 Manifest content scrip
 
 完成请求必须等待 Service Worker 回传完成结果；只有确认完成后才将当前 overview URL 标记为已处理。失败或无响应时按有界退避重试，页面 DOM/Turbo 状态变化及设置重新启用时重新检查；不能把“消息已发出”视为完成，否则临时失败只能靠刷新清除页面内状态。
 
-同一 Exercism 页面上注册的 content scripts 共用扩展隔离世界；不同脚本的顶层 `const` / `let` 名称必须唯一，否则重复声明会阻止脚本解析。`tests/exercism/overview/auto-mark-complete.test.js` 将自动完成脚本与 overview 关闭监听脚本在共享上下文按两种顺序加载，覆盖此约束。
+同一 Exercism 页面上注册的 content scripts 共用扩展隔离世界；不同脚本的顶层 `const` / `let` 名称必须唯一，否则重复声明会阻止脚本解析。`tests/exercism/overview/auto-mark-complete.test.js` 将当前 overview 自动化脚本在共享上下文验证，覆盖该约束。
 
 编辑页提交链由其它模块负责：
 

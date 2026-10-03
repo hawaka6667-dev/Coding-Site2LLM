@@ -1,6 +1,6 @@
 # Architecture
 //This document lists the project directory structure and file names only.
-//暂时停更改为手动
+//暂时停更 改为手动
 
 ```text
 Coding-Site2LLM/
@@ -70,7 +70,6 @@ Coding-Site2LLM/
 │       │   │   ├── content.js
 │       │   │   └── continue_after_exercism_modals.js
 │       │   ├── submitted_overview/
-│       │   │   ├── close_submitted_overview_after_completion.js
 │       │   │   └── open_submitted_overview_after_submit.js
 │       │   └── overview/
 │       │       ├── auto_mark_exercise_complete.js

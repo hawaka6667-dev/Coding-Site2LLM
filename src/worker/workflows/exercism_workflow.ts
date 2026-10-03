@@ -1,12 +1,10 @@
 /* @machine
 file: worker/workflows/exercism_workflow.js
-role: coordinate Exercism test-submit and submitted-overview window lifecycle
-contract: preserve per-tab submission deduplication and validate owned overview windows
+role: coordinate Exercism test-submit and submitted-overview window creation
+contract: preserve per-tab submission deduplication and validate submitted overview URLs
 */
 
 const exercismSubmitPromises = new Map<number, Promise<void>>();
-const SUBMITTED_OVERVIEW_WINDOWS_KEY = "codingSite2LlmSubmittedOverviewWindows";
-let submittedOverviewWindows: Record<string, string> | null = null;
 
 async function runExercismTestSubmit(
     tabId?: number,
@@ -93,28 +91,6 @@ async function runExercismTestSubmit(
     }
 }
 
-async function loadSubmittedOverviewWindows() {
-    if (submittedOverviewWindows) {
-        return submittedOverviewWindows;
-    }
-
-    const stored = await chrome.storage.session?.get?.(
-        SUBMITTED_OVERVIEW_WINDOWS_KEY
-    );
-    const saved = stored?.[SUBMITTED_OVERVIEW_WINDOWS_KEY];
-    submittedOverviewWindows = saved && typeof saved === "object"
-        ? saved as Record<string, string>
-        : {};
-    return submittedOverviewWindows;
-}
-
-async function persistSubmittedOverviewWindows(windows: Record<string, string>) {
-    submittedOverviewWindows = windows;
-    await chrome.storage.session?.set?.({
-        [SUBMITTED_OVERVIEW_WINDOWS_KEY]: windows
-    });
-}
-
 async function createSubmittedOverviewWindow(
     senderTab: chrome.tabs.Tab,
     overviewUrl: string,
@@ -155,11 +131,7 @@ async function createSubmittedOverviewWindow(
             return false;
         }
 
-        const windows = await loadSubmittedOverviewWindows();
-        const windowKey = String(createdWindow.id);
-        windows[windowKey] = targetUrl.pathname;
         try {
-            await persistSubmittedOverviewWindows(windows);
             const [createdTab] = await chrome.tabs.query({
                 windowId: createdWindow.id
             });
@@ -168,46 +140,10 @@ async function createSubmittedOverviewWindow(
             }
             await chrome.tabs.update(createdTab.id, { url: targetUrl.href });
         } catch (_) {
-            delete windows[windowKey];
-            await persistSubmittedOverviewWindows(windows).catch(() => {});
             await chrome.windows.remove(createdWindow.id).catch(() => {});
             return false;
         }
 
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-async function closeSubmittedOverviewWindow(senderTab: chrome.tabs.Tab) {
-    if (!Number.isInteger(senderTab?.id) || !Number.isInteger(senderTab.windowId)) {
-        return false;
-    }
-
-    try {
-        const windows = await loadSubmittedOverviewWindows();
-        const windowKey = String(senderTab.windowId);
-        const expectedPath = windows[windowKey];
-        const overviewUrl = new URL(senderTab.url || "");
-
-        if (
-            !expectedPath ||
-            overviewUrl.origin !== "https://exercism.org" ||
-            overviewUrl.pathname !== expectedPath
-        ) {
-            return false;
-        }
-
-        const tabs = await chrome.tabs.query({ windowId: senderTab.windowId });
-        if (tabs.length === 1 && tabs[0].id === senderTab.id) {
-            await chrome.windows.remove(senderTab.windowId);
-        } else {
-            await chrome.tabs.remove(senderTab.id);
-        }
-
-        delete windows[windowKey];
-        await persistSubmittedOverviewWindows(windows);
         return true;
     } catch (_) {
         return false;
@@ -360,16 +296,6 @@ function handleExercismWorkflowMessage(
         return true;
     }
 
-    if (message?.type === "exercism-close-submitted-overview-window") {
-        closeSubmittedOverviewWindow(sender.tab)
-            .then(closed => sendResponse({ closed }))
-            .catch(error => {
-                console.error("[exercism] overview window close ERROR:", error);
-                sendResponse({ closed: false });
-            });
-        return true;
-    }
-
     if (message?.type !== "exercism-mark-complete") {
         return null;
     }
@@ -389,18 +315,7 @@ function handleExercismWorkflowMessage(
     }
 
     markCompleteAndRefreshConcepts(tabId, sender.tab.url, operationId)
-        .then(completed => {
-            sendResponse({ completed });
-            if (completed && typeof chrome.tabs.sendMessage === "function") {
-                chrome.tabs.sendMessage(tabId, {
-                    type: "exercism-submitted-overview-completion-result",
-                    completed: true,
-                    operationId
-                }).catch(error => {
-                    console.error(`[Exercism][${operationId}] completion notice ERROR:`, error);
-                });
-            }
-        })
+        .then(completed => sendResponse({ completed }))
         .catch(error => {
             diagnostics.log("exercism-mark-complete", operationId, "workflow.failed", {
                 tabId,

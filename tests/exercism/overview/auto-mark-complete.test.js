@@ -11,106 +11,6 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { ROOT_DIR, loadRoutingWorker, loadExercismOverviewScript } = require("../../worker-test-harness.js");
 
-test("overview automation scripts can coexist in the shared extension world", () => {
-    const scriptPaths = [
-        path.join(ROOT_DIR, "worker", "exercism", "overview", "auto_mark_exercise_complete.js"),
-        path.join(
-            ROOT_DIR,
-            "worker",
-            "exercism",
-            "submitted_overview",
-            "close_submitted_overview_after_completion.js"
-        )
-    ];
-
-    for (const orderedPaths of [scriptPaths, [...scriptPaths].reverse()]) {
-        const context = vm.createContext({
-            chrome: {
-                storage: {
-                    local: { get: async () => ({}) },
-                    onChanged: { addListener() {} }
-                },
-                runtime: {
-                    onMessage: { addListener() {} },
-                    sendMessage: async () => ({})
-                }
-            },
-            document: {
-                documentElement: {},
-                addEventListener() {},
-                querySelectorAll: () => []
-            },
-            location: {
-                href: "https://exercism.org/tracks/ruby/exercises/example"
-            },
-            MutationObserver: class { observe() {} },
-            console,
-            URL
-        });
-
-        assert.doesNotThrow(() => {
-            for (const scriptPath of orderedPaths) {
-                vm.runInContext(fs.readFileSync(scriptPath, "utf8"), context);
-            }
-        });
-    }
-});
-
-test("requests an owned overview close only after confirmed completion", () => {
-    let onMessage;
-    const messages = [];
-    const context = vm.createContext({
-        chrome: {
-            runtime: {
-                onMessage: { addListener: listener => { onMessage = listener; } },
-                sendMessage: message => {
-                    messages.push(message);
-                    return Promise.resolve({ closed: true });
-                }
-            }
-        },
-        location: {
-            href: "https://exercism.org/tracks/go/exercises/lasagna?from=submit"
-        }
-    });
-
-    vm.runInContext(
-        fs.readFileSync(
-            path.join(
-                ROOT_DIR,
-                "worker",
-                "exercism",
-                "submitted_overview",
-                "close_submitted_overview_after_completion.js"
-            ),
-            "utf8"
-        ),
-        context
-    );
-
-    onMessage({
-        type: "exercism-submitted-overview-completion-result",
-        completed: false
-    });
-    context.location.href =
-        "https://exercism.org/tracks/go/exercises/lasagna/edit";
-    onMessage({
-        type: "exercism-submitted-overview-completion-result",
-        completed: true
-    });
-    context.location.href =
-        "https://exercism.org/tracks/go/exercises/lasagna?from=submit";
-    onMessage({
-        type: "exercism-submitted-overview-completion-result",
-        completed: true
-    });
-
-    assert.deepEqual(
-        messages.map(message => message.type),
-        ["exercism-close-submitted-overview-window"]
-    );
-});
-
 test("rechecks Exercism auto-completion after Turbo navigation", async () => {
     const documentListeners = new Map();
     const messages = [];
@@ -449,7 +349,6 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
     const messages = [];
     const events = [];
     const reloadedTabIds = [];
-    const completionNotices = [];
     const markButton = {
         innerText: "Mark as complete",
         offsetWidth: 100,
@@ -525,11 +424,6 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
             ? `concepts-reloaded-after-result-${tabId}`
             : `concepts-reloaded-before-result-${tabId}`);
     };
-    worker.chrome.tabs.sendMessage = async (tabId, message) => {
-        completionNotices.push({ tabId, message: JSON.parse(JSON.stringify(message)) });
-        events.push(`completion-notice-sent-${tabId}`);
-    };
-
     const documentListeners = new Map();
     const pageDocument = {
         documentElement: {},
@@ -581,7 +475,7 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
     overviewMutationCallback();
 
     const deadline = Date.now() + 1000;
-    while (completionNotices.length < 1 && Date.now() < deadline) {
+    while (reloadedTabIds.length < 2 && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 0));
     }
 
@@ -594,22 +488,9 @@ test("completes the Exercism overview condition-to-modal-to-result flow", async 
         ["exercism-mark-complete"]
     );
     assert.deepEqual(reloadedTabIds, [1, 3]);
-    assert.equal(completionNotices.length, 1);
-    assert.equal(completionNotices[0].tabId, 10);
-    assert.equal(
-        completionNotices[0].message.type,
-        "exercism-submitted-overview-completion-result"
-    );
-    assert.equal(completionNotices[0].message.completed, true);
-    assert.equal(typeof completionNotices[0].message.operationId, "string");
     assert.ok(
         events.indexOf("completion-result-output") <
             events.indexOf("concepts-reloaded-after-result-1"),
         "the completion result must be visible before concepts refresh"
-    );
-    assert.ok(
-        events.indexOf("concepts-reloaded-after-result-3") <
-            events.indexOf("completion-notice-sent-10"),
-        "the owner must be notified after the concepts refresh"
     );
 });
