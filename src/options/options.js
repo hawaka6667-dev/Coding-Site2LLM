@@ -10,12 +10,106 @@ const DEFAULT_SHORTCUTS = Object.freeze({
     "smart-return": ["Alt+Q", "Mouse5"]
 });
 const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
+const CUSTOM_LLM_PROVIDERS_KEY = "customLlmProviders";
+const BUILTIN_LLM_PROVIDER_NAMES = ["ChatGPT", "Claude", "DeepSeek", "Gemini", "DeepAI", "Kimi"];
 const ICON_THEMES = ["ice-cyan", "warm-ivory", "mint", "lemon"];
 
 const status = document.getElementById("status");
 const controls = [...document.querySelectorAll("[data-setting]")];
 const iconThemeControls = [...document.querySelectorAll("[data-icon-theme]")];
 let statusTimer = 0;
+let customLlmProviders = [];
+
+const llmProviderList = document.getElementById("llm-provider-list");
+const llmProviderForm = document.getElementById("llm-provider-form");
+const llmProviderNameInput = document.getElementById("llm-provider-name");
+const llmProviderUrlInput = document.getElementById("llm-provider-url");
+
+function renderLlmProviders() {
+    llmProviderList.replaceChildren();
+    for (const provider of customLlmProviders) {
+        const item = document.createElement("li");
+        const details = document.createElement("span");
+        const name = document.createElement("strong");
+        const url = document.createElement("small");
+        const remove = document.createElement("button");
+        name.textContent = provider.name;
+        url.textContent = provider.url;
+        details.append(name, url);
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.setAttribute("aria-label", `Remove ${provider.name}`);
+        remove.addEventListener("click", () => {
+            removeLlmProvider(provider.name).catch(error => {
+                showStatus("Could not remove provider: " + (error?.message || error));
+            });
+        });
+        item.append(details, remove);
+        llmProviderList.append(item);
+    }
+}
+
+async function loadLlmProviders() {
+    const stored = await chrome.storage.local.get(CUSTOM_LLM_PROVIDERS_KEY);
+    customLlmProviders = Array.isArray(stored[CUSTOM_LLM_PROVIDERS_KEY])
+        ? stored[CUSTOM_LLM_PROVIDERS_KEY].filter(provider =>
+            typeof provider?.name === "string" && typeof provider?.url === "string"
+        )
+        : [];
+    renderLlmProviders();
+}
+
+async function removeLlmProvider(name) {
+    customLlmProviders = customLlmProviders.filter(provider => provider.name !== name);
+    await chrome.storage.local.set({ [CUSTOM_LLM_PROVIDERS_KEY]: customLlmProviders });
+    renderLlmProviders();
+    showStatus("Provider removed");
+}
+
+llmProviderForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const name = llmProviderNameInput.value.trim();
+    let url;
+    try {
+        const input = llmProviderUrlInput.value.trim();
+        if (/^[a-z][a-z\d+.-]*:/i.test(input) && !/^https?:\/\//i.test(input)) {
+            throw new Error("Only HTTP(S) addresses are supported.");
+        }
+        url = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
+        if (!["http:", "https:"].includes(url.protocol)) {
+            throw new Error("Only HTTP(S) addresses are supported.");
+        }
+    } catch (error) {
+        showStatus(error?.message || "Enter a valid HTTP(S) address");
+        return;
+    }
+
+    if (!name) {
+        showStatus("Enter a provider name");
+        return;
+    }
+    if ([...BUILTIN_LLM_PROVIDER_NAMES, ...customLlmProviders.map(provider => provider.name)]
+        .some(existingName => existingName.toLowerCase() === name.toLowerCase())) {
+        showStatus("A provider with that name already exists");
+        return;
+    }
+    if (customLlmProviders.some(provider => {
+        try {
+            return new URL(provider.url).origin === url.origin;
+        } catch (_) {
+            return false;
+        }
+    })) {
+        showStatus("A provider for that website already exists");
+        return;
+    }
+
+    customLlmProviders.push({ name, url: url.href });
+    await chrome.storage.local.set({ [CUSTOM_LLM_PROVIDERS_KEY]: customLlmProviders });
+    llmProviderForm.reset();
+    renderLlmProviders();
+    showStatus("Provider added");
+});
 
 function showStatus(text) {
     status.textContent = text;
@@ -258,6 +352,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         return;
     }
 
+    if (changes[CUSTOM_LLM_PROVIDERS_KEY]) {
+        loadLlmProviders().catch(error => {
+            showStatus("Could not load providers: " + (error?.message || error));
+        });
+    }
+
     for (const control of controls) {
         const change = changes[control.dataset.setting];
         if (change) {
@@ -275,6 +375,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     }
 });
 
-Promise.all([renderSettings(), renderShortcut()]).catch(error => {
+Promise.all([renderSettings(), renderShortcut(), loadLlmProviders()]).catch(error => {
     showStatus("Could not load settings: " + (error?.message || error));
 });

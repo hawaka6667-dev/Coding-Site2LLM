@@ -246,9 +246,10 @@
         }
 
         .provider {
-            display: grid;
-            justify-items: end;
-            gap: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
             margin: 6px 0 8px;
         }
 
@@ -269,6 +270,17 @@
             color: #1b1d21;
         }
 
+        .provider button {
+            padding: 4px 7px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
         @media (prefers-color-scheme: dark) {
             .provider option {
                 background: #1b1d21;
@@ -281,15 +293,10 @@
 <body>
     <button id="send-context" type="button">Send question to LLM (shortcut: Alt+Q)</button>
 
-    <label class="provider" for="llm-provider">
-        <select id="llm-provider" aria-label="LLM provider">
-            <option value="ChatGPT">ChatGPT</option>
-            <option value="Claude">Claude</option>
-            <option value="DeepSeek">DeepSeek</option>
-            <option value="Gemini">Gemini</option>
-            <option value="DeepAI">DeepAI</option>
-        </select>
-    </label>
+    <div class="provider">
+        <select id="llm-provider" aria-label="LLM provider"></select>
+        <button id="manage-llm-providers" type="button">Manage</button>
+    </div>
 
     <hr>
 

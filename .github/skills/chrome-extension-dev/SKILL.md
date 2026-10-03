@@ -1,6 +1,6 @@
 ---
 name: chrome-extension-dev
-description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome extension、content script、service worker、manifest、popup/options，或需要用 Chrome MCP 检查真实浏览器行为时使用；完成验证后 reload 扩展并 refresh 所有已打开页面。'
+description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome extension、content script、service worker、manifest、popup/options，或需要用 Chrome MCP 检查真实浏览器行为时使用；完成验证后 reload 扩展，网页刷新由开发者负责。'
 ---
 
 # chrome扩展开发
@@ -31,6 +31,8 @@ description: 'Chrome 扩展开发与调试工作流。新增或修改 Chrome ext
 先确认 Chrome MCP 已连接，并通过 `list_pages` 成功获取当前标签页。若 MCP 未连接或无法成功列出标签页，停止 reload/refresh 并如实报告连接阻塞；不得把连接失败描述为没有可访问页面，也不得伪造已完成的浏览器刷新。
 
 使用 Chrome DevTools MCP 的 `reload_extension` 重载扩展。
+
+网页刷新由开发者负责。不要自动 refresh、reload 或导航任何已打开网页；需要验证新注入脚本时，告知开发者手动刷新相关页面，之后再通过 `list_pages` 和页面检查工具复核结果。
 
 
 ## 项目验证命令

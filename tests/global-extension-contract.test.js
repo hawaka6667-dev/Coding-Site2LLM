@@ -97,6 +97,17 @@ test("injects the shortcut bridge on HTTP(S) pages exactly once", () => {
     assert.ok(!shortcutScripts[0].js.includes("worker/llm_copy_tracker.js"));
 });
 
+test("injects the SQLBolt Run Query shortcut only on lesson pages", () => {
+    const manifest = readManifest();
+    const sqlboltScripts = manifest.content_scripts.filter(script =>
+        script.js.includes("worker/sqlbolt/run_query.js")
+    );
+
+    assert.equal(sqlboltScripts.length, 1);
+    assert.deepEqual(sqlboltScripts[0].matches, ["https://sqlbolt.com/lesson/*"]);
+    assert.equal(sqlboltScripts[0].run_at, "document_start");
+});
+
 test("keeps local resources referenced by extension HTML in the package", () => {
     const htmlFiles = listFiles(ROOT_DIR).filter(file => file.endsWith(".html"));
 
@@ -334,22 +345,32 @@ test("keeps the popup LLM provider setting wired to the worker", () => {
         path.join(ROOT_DIR, "worker", "workflows", "run_coding_context_to_llm_workflow.js"),
         "utf8"
     );
+    const optionsSource = fs.readFileSync(
+        path.join(ROOT_DIR, "options", "options.js"),
+        "utf8"
+    );
 
     assert.match(popupHtml, /id="llm-provider"/);
-    assert.match(popupHtml, /<option value="DeepSeek">DeepSeek<\/option>/);
+    assert.match(popupHtml, /id="manage-llm-providers"/);
     assert.match(popupSource, /"selectedLlmProvider"/);
+    assert.match(popupSource, /"customLlmProviders"/);
+    assert.match(popupSource, /BUILTIN_LLM_PROVIDERS/);
+    assert.match(popupSource, /replaceChildren/);
     assert.match(popupSource, /codingSite2LlmShortcuts/);
     assert.match(popupSource, /DEFAULT_LLM_PROVIDER = "DeepSeek"/);
     assert.match(workflowSource, /"selectedLlmProvider"/);
+    assert.match(workflowSource, /"customLlmProviders"/);
+    assert.match(optionsSource, /"customLlmProviders"/);
 
-    for (const provider of ["DeepSeek", "ChatGPT", "Claude", "Gemini", "DeepAI"]) {
+    for (const provider of ["DeepSeek", "ChatGPT", "Claude", "Gemini", "DeepAI", "Kimi"]) {
         assert.match(providerSource, new RegExp(`name: "${provider}"`));
         assert.match(providerSource, new RegExp(`url: "https://`));
     }
 
     assert.equal(
         manifest.content_scripts.some(script =>
-            script.js.includes("worker/llm_copy_tracker.js")
+            script.js.includes("worker/llm_copy_tracker.js") &&
+            script.matches.includes("*://*/*")
         ),
         true
     );

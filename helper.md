@@ -1,4 +1,3 @@
-VS Code tasks `Version: +0.001 (Batch)` and `Version: +0.01 (Minor)` directly apply those increments through `.build/version.ps1`; each checks that the resulting Git tag is unused before updating `src/manifest.json`.
 # Coding Site2LLM
 
 这是一个 Chrome extension：从当前 coding site 提取 problem context，组装 prompt，并把 prompt 交给用户已打开的 LLM page。
@@ -33,7 +32,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 
 当前支持的 coding sites：Exercism、LeetCode、Codewars，以及其它 HTTP(S) pages 的 raw-source fallback。
 
-当前支持的 LLM providers：DeepSeek、ChatGPT、Claude、Gemini、DeepAI 等。具体 provider configuration 以 `src/worker/configure_supported_coding_sites_and_llm_providers.ts` 为准。
+内置 LLM providers：DeepSeek、ChatGPT、Claude、Gemini、DeepAI、Kimi。Options 可添加自定义 HTTP(S) provider，保存在 `customLlmProviders`；按名称选择后，worker 使用保存 URL 的 origin 查找或打开目标标签页。具体内置匹配规则以 `src/worker/configure_supported_coding_sites_and_llm_providers.ts` 为准。
 
 ### 日常开发入口
 
@@ -49,6 +48,8 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/exercism/edit/continue-dialogs.test.js` | `npm run test:unit` |
 | core workflow operation logs and debug-module refactor | `src/worker/debug/` (planned), `src/worker/diagnostics.js`, `src/worker/workflows/`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:unit` 和 `npm run test:routing` |
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
+| SQLBolt Run Query shortcut | `src/worker/sqlbolt/run_query.js`, `src/manifest.json` | `npm run test:unit` 和 `npm run test:contracts` |
+| LLM provider options, popup selection and routing | `src/options/options.js`, `src/popup/popup.js`, `src/worker/configure_supported_coding_sites_and_llm_providers.ts`, `src/worker/workflows/run_coding_context_to_llm_workflow.ts` | `npm run test:unit`, `npm run test:routing`, `npm run test:contracts` |
 | extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
 | development environment and generated package | `tests/dev-check.ps1`, `package.json`, `src/manifest.json`, `dist/` | `npm run dev:check` |
 
@@ -206,8 +207,12 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 | `worker/workflows/smart_return/smart_return_workflow.ts` | 协调单个 LLM tab 的 Smart Return cycle、激活路由记录的来源 tab、revision 检查和阶段诊断 | route 存储、导航监听、替代 tab 选择、站点编辑器实现 |
 | `worker/diagnostics.js` | 为页面 content script 与 Service Worker 提供脱敏的结构化操作日志及 `operationId` | 记录页面正文、prompt、剪贴板或用户代码；输出高频轮询/DOM 变更日志 |
 | `worker/workflows/run_coding_context_to_llm_workflow.ts` | 捕获 coding context、请求 Smart Return 模块建立发送来源 route、选择 LLM 并发送 prompt；维护快捷键锁和 runtime message dispatch | route 持久化实现、Smart Return 回跳与代码写入、Exercism 窗口生命周期 |
+| `options/options.js` | 保存 Options 页面设置及用户自定义 LLM provider；provider 名称不能与内置项或其它自定义项重名，地址只允许 HTTP(S) | popup provider 选择和 worker tab 查找 |
+| `worker/configure_supported_coding_sites_and_llm_providers.ts` | 定义内置 provider 元数据，并把有效自定义 provider URL 解析为 origin 匹配规则 | 用户设置 UI、prompt 捕获 |
+| `worker/llm_copy_tracker.js` | 在 HTTP(S) 页面转发显式复制文本，供已建立的 Smart Return route 使用 | provider 管理、route 存储 |
+| `worker/sqlbolt/run_query.js` | 仅在 SQLBolt lesson 的编辑器聚焦时，将 Ctrl+Enter 转发到同一编辑器容器的 `RUN QUERY` 链接 | SQLBolt 页面以外的快捷键、其它站点编辑器 |
 | `worker/workflows/exercism_workflow.ts` | 协调 Exercism test-submit、受管 overview 窗口、Mark as complete 和 concepts 刷新 | 页面 selector 和 overview/edit 页面状态判断 |
-| `submitted_overview/open_submitted_overview_after_submit.js` | 仅在 edit 页捕获 Submit 与同题 Back to Exercise Turbo 导航，按设置请求创建提交后的 overview；成功后保留 editor | Chrome 窗口 API、overview 完成和普通 overview 路由 |
+| `submitted_overview/open_submitted_overview_after_submit.js` | 仅在 edit 页捕获 Submit；提交后的 Turbo 导航目标为同题 overview 或同题 `/edit` 时，按设置请求创建不抢焦点的 overview 窗口，并保留原标签页中的 editor | Chrome 窗口 API、overview 完成和普通 overview 路由 |
 | `submitted_overview/close_submitted_overview_after_completion.js` | 仅在 overview 页收到完成成功通知后请求关闭受管窗口 | 判断完成结果、直接调用 Chrome 窗口 API、普通 overview 弹窗 |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 在 overview URL 发现可用的 `Mark as complete` 并请求完成链；也预先注入 Exercism `/edit` 文档以监听返回 overview 的 Turbo 导航 | 是否进入 `/edit` |

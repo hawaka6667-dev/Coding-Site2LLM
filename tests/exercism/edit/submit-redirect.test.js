@@ -9,7 +9,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
-const { ROOT_DIR } = require("../../worker-test-harness.js");
+
+const SOURCE_ROOT = path.join(__dirname, "..", "..", "..", "src");
 
 test("returns to the same Exercism editor after the submitted overview window opens", async () => {
     const listeners = [];
@@ -51,7 +52,7 @@ test("returns to the same Exercism editor after the submitted overview window op
     vm.runInContext(
         fs.readFileSync(
             path.join(
-                ROOT_DIR,
+                SOURCE_ROOT,
                 "worker",
                 "exercism",
                 "submitted_overview",
@@ -169,7 +170,7 @@ test("returns to the overview when automatic completion is disabled", async () =
     vm.runInContext(
         fs.readFileSync(
             path.join(
-                ROOT_DIR,
+                SOURCE_ROOT,
                 "worker",
                 "exercism",
                 "submitted_overview",
@@ -194,4 +195,89 @@ test("returns to the overview when automatic completion is disabled", async () =
     assert.equal(overviewVisit.prevented, true);
     assert.deepEqual(replacements, [backToExerciseLink.href]);
     assert.deepEqual(messages, []);
+});
+
+test("opens the submitted overview when Exercism returns to the same editor URL", async () => {
+    const listeners = [];
+    const replacements = [];
+    const messages = [];
+    const editorUrl = "https://exercism.org/tracks/python/exercises/pov/edit";
+    const overviewUrl = "https://exercism.org/tracks/python/exercises/pov?from=editor";
+    const backToExerciseLink = {
+        innerText: "Back to Exercise",
+        href: overviewUrl,
+        offsetWidth: 100,
+        offsetHeight: 20,
+        getAttribute: () => null
+    };
+    const context = vm.createContext({
+        URL,
+        Date,
+        document: {
+            addEventListener: (type, listener, capture) =>
+                listeners.push({ type, listener, capture }),
+            querySelectorAll: () => [backToExerciseLink]
+        },
+        chrome: {
+            storage: { local: { get: async () => ({ exercismAutoMarkComplete: true }) } },
+            runtime: {
+                onMessage: { addListener() {} },
+                sendMessage: message => {
+                    messages.push(message);
+                    return Promise.resolve({ opened: true });
+                }
+            }
+        },
+        location: {
+            href: editorUrl,
+            replace: url => replacements.push(url)
+        }
+    });
+
+    vm.runInContext(
+        fs.readFileSync(
+            path.join(
+                SOURCE_ROOT,
+                "worker",
+                "exercism",
+                "submitted_overview",
+                "open_submitted_overview_after_submit.js"
+            ),
+            "utf8"
+        ),
+        context
+    );
+
+    const submitClickListener = listeners.find(listener => listener.type === "click");
+    const beforeVisitListener = listeners.find(
+        listener => listener.type === "turbo:before-visit"
+    );
+    const submitClick = {
+        target: { closest: () => ({ disabled: false }) }
+    };
+    submitClickListener.listener(submitClick);
+
+    const editorVisit = {
+        detail: { url: editorUrl },
+        prevented: false,
+        preventDefault() { this.prevented = true; }
+    };
+    beforeVisitListener.listener(editorVisit);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(editorVisit.prevented, true);
+    assert.deepEqual(replacements, [editorUrl]);
+    assert.equal(JSON.stringify(messages), JSON.stringify([{
+        type: "exercism-create-submitted-overview-window",
+        overviewUrl,
+        editorUrl
+    }]));
+
+    submitClickListener.listener(submitClick);
+    const loadedEditorListener = listeners.find(listener => listener.type === "turbo:load");
+    loadedEditorListener.listener();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(replacements, [editorUrl, editorUrl]);
+    assert.equal(messages.length, 2);
 });

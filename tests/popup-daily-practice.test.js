@@ -38,9 +38,9 @@ function createElement() {
     };
 }
 
-async function loadPopup() {
+async function loadPopup(initialStorage = {}) {
     const elements = new Map();
-    const storedValues = {};
+    const storedValues = { ...initialStorage };
     const openedTabs = [];
     const getElementById = id => {
         if (!elements.has(id)) {
@@ -59,8 +59,9 @@ async function loadPopup() {
         chrome: {
             storage: {
                 local: {
-                    async get(key) {
-                        return { [key]: storedValues[key] };
+                    async get(keys) {
+                        const requested = Array.isArray(keys) ? keys : [keys];
+                        return Object.fromEntries(requested.map(key => [key, storedValues[key]]));
                     },
                     async set(values) {
                         Object.assign(storedValues, values);
@@ -159,3 +160,4 @@ test("submits a custom URL when Enter is pressed", async () => {
 
     assert.equal(storedValues.dailyPracticeCustomProviders[0].url, "https://baidu.com/");
 });
+

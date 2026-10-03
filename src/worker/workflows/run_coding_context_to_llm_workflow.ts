@@ -9,11 +9,16 @@ let keyboardShortcutHeld = false;
 let keyboardShortcutHeldReleaseToken = "";
 let keyboardShortcutReleaseTimer: ReturnType<typeof setTimeout> | null = null;
 const SELECTED_LLM_PROVIDER_KEY = "selectedLlmProvider";
+const CUSTOM_LLM_PROVIDERS_KEY = "customLlmProviders";
 const KEYBOARD_SHORTCUT_LOCK_TIMEOUT_MS = 10000;
 
 async function getSelectedLlmProvider() {
-    const stored = await chrome.storage.local.get(SELECTED_LLM_PROVIDER_KEY);
-    return LLM_PROVIDERS.find(provider =>
+    const stored = await chrome.storage.local.get([
+        SELECTED_LLM_PROVIDER_KEY,
+        CUSTOM_LLM_PROVIDERS_KEY
+    ]);
+    const providers = getLlmProviders(stored[CUSTOM_LLM_PROVIDERS_KEY]);
+    return providers.find(provider =>
         provider.name === stored[SELECTED_LLM_PROVIDER_KEY]
     ) || LLM_PROVIDERS[0];
 }
@@ -118,11 +123,11 @@ async function runWorkflowOnce(selectedText = "", operationId: string) {
         currentTab,
         await getSelectedLlmProvider()
     );
-    const deepSeekTab = llm.tab;
+    const llmTab = llm.tab;
     await SmartReturn.routes.save({
         windowId: currentTab.windowId,
         sourceTabId: currentTab.id,
-        llmTabId: deepSeekTab.id,
+        llmTabId: llmTab.id,
         sourcePlatform: platform.name,
         sourceUrl: currentTab.url || "",
         sourceIdentity: getCodingPageIdentity(
@@ -141,29 +146,29 @@ async function runWorkflowOnce(selectedText = "", operationId: string) {
             platform: platform.name,
             provider: llm.provider.name,
             sourceTabId: currentTab.id,
-            targetTabId: deepSeekTab.id
+            targetTabId: llmTab.id
         }
     );
     mark(`find ${llm.provider.name}`, start);
 
     start = performance.now();
-    await chrome.tabs.update(deepSeekTab.id, { active: true });
-    mark("activate DeepSeek", start);
+    await chrome.tabs.update(llmTab.id, { active: true });
+    mark(`activate ${llm.provider.name}`, start);
 
     start = performance.now();
-    await waitForDeepSeekInput(deepSeekTab.id);
-    mark("waitForDeepSeekInput", start);
+    await waitForLlmInput(llmTab.id);
+    mark("waitForLlmInput", start);
 
     start = performance.now();
-    await insertText(deepSeekTab.id, prompt);
+    await insertText(llmTab.id, prompt);
     mark("insertText", start);
 
     start = performance.now();
-    await keyTap(deepSeekTab.id, "Enter");
+    await keyTap(llmTab.id, "Enter");
     mark("Enter", start);
 
     start = performance.now();
-    await scrollUp(deepSeekTab.id, 50);
+    await scrollUp(llmTab.id, 50);
     mark("scroll", start);
 
     (globalThis as any).CodingSite2LlmDiagnostics.log(

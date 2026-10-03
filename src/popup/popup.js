@@ -6,8 +6,10 @@ contract: default_popup owns send; sync Exercism redirect key with overview scri
 const EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_SETTING_KEY =
     "exercismOpenNewExerciseInEditor";
 const SELECTED_LLM_PROVIDER_KEY = "selectedLlmProvider";
+const CUSTOM_LLM_PROVIDERS_KEY = "customLlmProviders";
 const DAILY_PRACTICE_CUSTOM_PROVIDERS_KEY = "dailyPracticeCustomProviders";
 const DEFAULT_LLM_PROVIDER = "DeepSeek";
+const BUILTIN_LLM_PROVIDERS = ["ChatGPT", "Claude", "DeepSeek", "Gemini", "DeepAI", "Kimi"];
 const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
 const DEFAULT_SEND_CONTEXT_SHORTCUT = "Alt+Q";
 
@@ -200,6 +202,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local" && changes[SHORTCUTS_KEY]) {
         renderShortcut().catch(() => {});
     }
+    if (areaName === "local" && (
+        changes[SELECTED_LLM_PROVIDER_KEY] || changes[CUSTOM_LLM_PROVIDERS_KEY]
+    )) {
+        renderProvider().catch(() => {});
+    }
 });
 
 function showStatus(text, sticky = false) {
@@ -224,18 +231,43 @@ async function renderToggle() {
 }
 
 async function renderProvider() {
-    const stored = await chrome.storage.local.get(SELECTED_LLM_PROVIDER_KEY);
+    const stored = await chrome.storage.local.get([
+        SELECTED_LLM_PROVIDER_KEY,
+        CUSTOM_LLM_PROVIDERS_KEY
+    ]);
+    const customProviders = Array.isArray(stored[CUSTOM_LLM_PROVIDERS_KEY])
+        ? stored[CUSTOM_LLM_PROVIDERS_KEY].filter(provider =>
+            typeof provider?.name === "string" && typeof provider?.url === "string"
+        )
+        : [];
+    const providers = [
+        ...BUILTIN_LLM_PROVIDERS.map(name => ({ name, value: name })),
+        ...customProviders.map(provider => ({
+            name: provider.name,
+            value: provider.name
+        }))
+    ];
+    providerSelect.replaceChildren(...providers.map(provider => {
+        const option = document.createElement("option");
+        option.value = provider.value;
+        option.textContent = provider.name;
+        return option;
+    }));
     const value = stored[SELECTED_LLM_PROVIDER_KEY] || DEFAULT_LLM_PROVIDER;
 
-    providerSelect.value = [...providerSelect.options].some(option =>
-        option.value === value
-    ) ? value : DEFAULT_LLM_PROVIDER;
+    providerSelect.value = providers.some(provider => provider.value === value)
+        ? value
+        : DEFAULT_LLM_PROVIDER;
 }
 
 providerSelect.addEventListener("change", async () => {
     await chrome.storage.local.set({
         [SELECTED_LLM_PROVIDER_KEY]: providerSelect.value
     });
+});
+
+document.getElementById("manage-llm-providers").addEventListener("click", () => {
+    chrome.runtime.openOptionsPage();
 });
 
 toggle.addEventListener("change", async () => {

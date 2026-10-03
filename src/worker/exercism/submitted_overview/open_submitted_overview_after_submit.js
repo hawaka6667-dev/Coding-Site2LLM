@@ -46,6 +46,11 @@ function isSubmittedOverviewForEditor(overviewUrl, editorUrl) {
     }
 }
 
+function isSubmittedOverviewOrEditorForEditor(url, editorUrl) {
+    return isSubmittedOverviewForEditor(url, editorUrl) ||
+        getSubmittedOverviewEditorUrl(url) === editorUrl;
+}
+
 function getSubmittedOverviewBackLinkUrl() {
     const link = [...document.querySelectorAll("a[href], [role='link'][href]")]
         .find(candidate =>
@@ -75,7 +80,7 @@ function consumeSubmittedOverviewRedirectTarget(overviewUrl) {
     }
 
     if (
-        !isSubmittedOverviewForEditor(overviewUrl, editorUrl) ||
+        !isSubmittedOverviewOrEditorForEditor(overviewUrl, editorUrl) ||
         !isSubmittedOverviewForEditor(backLinkUrl, editorUrl)
     ) {
         return null;
@@ -140,6 +145,11 @@ document.addEventListener("turbo:before-visit", event => {
 
 document.addEventListener("turbo:load", () => {
     if (getSubmittedOverviewEditorUrl(location.href) === submittedOverviewEditorReturnTarget) {
+        const target = consumeSubmittedOverviewRedirectTarget(location.href);
+
+        if (target) {
+            void openSubmittedOverviewAndKeepEditor(target, true);
+        }
         return;
     }
 

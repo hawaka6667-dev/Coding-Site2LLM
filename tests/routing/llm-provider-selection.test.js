@@ -19,6 +19,47 @@ test("recognizes valid LLM provider URLs only", () => {
     assert.equal(result, true);
 });
 
+test("includes Kimi and matches custom providers by exact origin", async () => {
+    const context = loadRoutingWorker({
+        tabs: [{ id: 1, index: 0, windowId: 1, url: "https://coding.example/" }]
+    });
+    context.chrome.storage.local.get = async () => ({
+        selectedLlmProvider: "Local LLM",
+        customLlmProviders: [{ name: "Local LLM", url: "http://localhost:3000/chat" }]
+    });
+    const result = vm.runInContext(`(() => {
+        const providers = getLlmProviders([
+            { name: "Local LLM", url: "http://localhost:3000/chat" },
+            { name: "Bad URL", url: "javascript:alert(1)" },
+            { name: "DeepSeek", url: "https://duplicate.example/" }
+        ]);
+        const custom = providers.find(provider => provider.name === "Local LLM");
+        return {
+            kimi: providers.find(provider => provider.name === "Kimi")?.match("https://kimi.com/"),
+            custom: custom?.match("http://localhost:3000/conversation/1"),
+            wrongOrigin: custom?.match("http://localhost:3001/"),
+            invalidAdded: providers.some(provider => provider.name === "Bad URL"),
+            builtinNameNotOverridden: providers.find(provider => provider.name === "DeepSeek").url
+        };
+    })()`, context);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+        kimi: true,
+        custom: true,
+        wrongOrigin: false,
+        invalidAdded: false,
+        builtinNameNotOverridden: "https://chat.deepseek.com/"
+    });
+
+    const selected = await context.getSelectedLlmProvider();
+    const target = await context.findLlmTab(
+        { id: 1, index: 0, windowId: 1 },
+        selected
+    );
+    assert.equal(selected.name, "Local LLM");
+    assert.equal(target.tab.url, "http://localhost:3000/chat");
+});
+
 test("finds the selected provider to the left and opens it to the left otherwise", async () => {
     const leftProviderTab = { id: 2, index: 1, url: "https://claude.ai/" };
     const rightProviderTab = { id: 3, index: 3, url: "https://claude.ai/" };

@@ -148,7 +148,7 @@ async function createSubmittedOverviewWindow(
 
         const createdWindow = await chrome.windows.create({
             url: "about:blank",
-            focused: false
+            focused: false            //出bug时要弄成显式追踪
         });
 
         if (!Number.isInteger(createdWindow?.id)) {

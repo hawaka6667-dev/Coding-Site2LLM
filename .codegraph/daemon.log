@@ -7,3 +7,6 @@
 [2m2026-09-23T18:33:26.6806878+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m watcher sync #5: 1 file(s) reindexed, 0 removed — options/options.js [3msync[0m[2m=[0m5 [3mfiles_reindexed[0m[2m=[0m1 [3mfiles_removed[0m[2m=[0m0
 [2m2026-09-23T18:34:07.0039956+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300101 [3midle_timeout_ms[0m[2m=[0m300000
 [2m2026-09-23T18:34:07.0209828+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Coding Site2LLM
+[2m2026-10-03T16:15:04.4574712+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mf:\@llm made\Coding Site2LLM [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-03T16:20:04.5850387+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300147 [3midle_timeout_ms[0m[2m=[0m300000
+[2m2026-10-03T16:20:04.6024006+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Coding Site2LLM

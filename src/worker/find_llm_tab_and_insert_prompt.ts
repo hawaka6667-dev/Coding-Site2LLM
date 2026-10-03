@@ -31,7 +31,7 @@ async function findLlmTab(
     return { tab, provider: preferredProvider };
 }
 
-async function focusDeepSeekInput(tabId: number) {
+async function focusLlmInput(tabId: number) {
     const found = await executePage(tabId, selectors => {
         for (const selector of selectors) {
             for (const element of document.querySelectorAll(selector)) {
@@ -48,18 +48,18 @@ async function focusDeepSeekInput(tabId: number) {
     return found === true;
 }
 
-async function waitForDeepSeekInput(tabId: number, timeout = 30000) {
+async function waitForLlmInput(tabId: number, timeout = 30000) {
     const start = performance.now();
 
     while (performance.now() - start < timeout) {
-        if (await focusDeepSeekInput(tabId)) {
+        if (await focusLlmInput(tabId)) {
             return;
         }
 
         await sleep(100);
     }
 
-    throw new Error("DeepSeek input not found.");
+    throw new Error("LLM input not found.");
 }
 
 async function insertText(tabId: number, text: string) {
@@ -97,6 +97,6 @@ async function insertText(tabId: number, text: string) {
     }, [text]);
 
     if (inserted !== true) {
-        throw new Error("Could not insert text into DeepSeek input.");
+        throw new Error("Could not insert text into LLM input.");
     }
 }

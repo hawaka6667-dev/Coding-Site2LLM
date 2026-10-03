@@ -54,8 +54,60 @@ const LLM_PROVIDERS: LlmProvider[] = [
         name: "DeepAI",
         url: "https://deepai.org/",
         match: url => /^https:\/\/(www\.)?deepai\.org\//.test(url)
+    },
+    {
+        name: "Kimi",
+        url: "https://kimi.com/",
+        match: url => /^https:\/\/(www\.)?kimi\.com\//.test(url)
     }
 ];
+
+function getLlmProviders(customProviders: unknown = []): LlmProvider[] {
+    const providers = [...LLM_PROVIDERS];
+    if (!Array.isArray(customProviders)) {
+        return providers;
+    }
+
+    for (const item of customProviders) {
+        if (typeof item !== "object" || item === null) {
+            continue;
+        }
+
+        const savedProvider = item as { name?: unknown; url?: unknown };
+        if (typeof savedProvider.name !== "string" ||
+            typeof savedProvider.url !== "string") {
+            continue;
+        }
+
+        const name = savedProvider.name.trim();
+        if (!name) {
+            continue;
+        }
+
+        try {
+            const target = new URL(savedProvider.url);
+            if (!["http:", "https:"].includes(target.protocol)) {
+                continue;
+            }
+
+            providers.push({
+                name,
+                url: target.href,
+                match: candidate => {
+                    try {
+                        return new URL(candidate).origin === target.origin;
+                    } catch (_) {
+                        return false;
+                    }
+                }
+            });
+        } catch (_) {
+            // Ignore invalid values from storage.
+        }
+    }
+
+    return providers;
+}
 
 const INPUT_SELECTORS: string[] = [
     "textarea",
