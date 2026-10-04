@@ -6,7 +6,7 @@
 这份文档面向两类读者，内容按这两个入口组织：
 
 - **人**：快速恢复 project context，知道下一步改哪里、测什么。
-- **LLM**：恢复 technical context，知道哪些是 module contract，哪些只是 implementation detail。**
+- **LLM**：恢复 technical context，区分 module contract 与 implementation detail；不得把内容级别上升为设计契约。
 
 ## A. 给人：快速恢复
 
@@ -122,6 +122,8 @@ popup 的 daily-practice entry 由 `src/popup/daily_practice_providers.js` 的 p
 
 ## B. 给 LLM：技术契约
 
+本节同时记录已验证的外部行为约束和当前实现导航。selector、时序、内部状态字段及文件职责都可能变化；修改时应以当前代码和相邻测试核实，不因本节描述而维持旧实现。
+
 ### 核心数据流
 
 ```text
@@ -182,13 +184,13 @@ Exercism `/edit` 的 Smart Return 使用可见 `.cm-editor .cm-content[contented
 
 ### 可复用工作流生命周期
 
-发送、复制、回跳不是一次性的线性脚本，而是同一 LLM tab 上可反复执行的独立 cycle。任何跨页面 workflow 都必须显式定义 `idle -> captured -> consuming -> idle` 的状态转换，以及 success、failure、cancel 和无目标页各自的终态；不能只实现首次成功路径后留下 in-flight flag、缓存文本或页面状态给下一次调用复用。
+发送、复制、回跳可能在同一 LLM tab 上反复执行。对于有异步状态或可重复调用的 workflow，应按具体风险明确必要的状态转换和成功、失败、取消、无目标等终态；不要求所有 workflow 采用同一状态机。
 
-Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payload；找到目标页后，无论代码写入、测试或提交成功或失败，都在 `finally` 中尝试消费本轮 payload。所有基于 route 快照的异步写入都必须比较持久化 revision，包括首次保存目标 `sourceTabId/status`、记录 copy payload 和最终清理；若新题或新复制已更新 route，旧 cycle 不得覆盖新 route 或清空新 payload。首次目标更新发现 revision 不匹配时，本轮必须在导航或写代码前退出。仅在没有匹配目标页时保留尚未消费的 payload。扩展 reload、Service Worker 重启和页面 Turbo 导航都必须按这个 lifecycle 恢复可用状态，不能让上一轮的 payload 意外进入下一轮。
+Smart Return 成功回填后启动的站点测试/提交属于 adapter 的独立工作，不是 ret 的完成条件；ret 不等待它，pending adapter work 也不能阻塞后续 ret。处理并发 route 或 payload 更新时，旧 cycle 不得覆盖新状态或清理新 payload；revision、持久化和 cleanup 的具体实现以当前代码为准。payload 在失败路径上的保留或清理，应由对应实现和测试确认，不从成功路径推定。
 
-同一个 LLM tab 的 Smart Return 必须串行到当前异步 cycle 完成，按键释放不代表回跳流程完成；不同 LLM tab 可独立运行。`Web source` 的 Smart Return 只可返回到完整 URL identity 相同的 HTTP(S) 页面，不得退回到任意网页。
+同一个 LLM tab 的 Smart Return cycle 应避免彼此重叠，直到 ret 自身的路由校验、来源页激活、回填及必要 cleanup 完成；adapter 的测试/提交不属于这个等待范围。不同 LLM tab 可独立运行。`Web source` 的返回目标按实现和测试确认，不应仅因 URL 相似就猜测替代标签页。
 
-测试必须至少覆盖同一 tab 的两轮连续 workflow、第一轮失败后第二轮仍能开始，以及第一轮尚未收尾时新 route 已写入且旧 finalizer 不得覆盖它；不要只用单次成功断言证明 workflow 正确。
+测试范围按本次改动和风险选择。涉及 ret 重复调用或 adapter 时序时，覆盖连续 ret 且 adapter pending 不阻塞下一轮；涉及 route 并发或失败清理时，再覆盖相应竞态和失败路径。单元测试不必为了满足文档而重复跑完整 workflow。
 
 ### Debug 追踪
 
@@ -196,7 +198,9 @@ Smart Return 的复制文本是一次性 payload：新复制必须替换旧 payl
 
 ### 模块边界
 
-| 模块 | 只负责 | 不负责 |
+下表是当前代码的职责导航，不是不可跨越的架构边界。调整职责前沿实际调用链、状态 owner 和相邻测试判断影响；不要为了符合表格而复制逻辑或强行拆分。
+
+| 模块 | 当前主要职责 | 常见协作边界 |
 | --- | --- | --- |
 | `worker/adapters/*_adapter.ts` | 每个站点独立负责页面提取、过滤、编辑器回写和站点内测试提交 | 其它站点 selector、跨页面导航策略 |
 | `route_coding_page_and_build_llm_prompt.js` | URL 路由和 prompt 组装 | 页面自动化和 LLM 交互 |
@@ -303,12 +307,11 @@ Codewars Smart Return 必须通过 `#code .js-editor .CodeMirror` 的 CodeMirror
 
 ### Exercism 页面测试原则
 
-所有 Exercism 页面相关测试都应提供 `state-transition coverage`：从明确的 `initial state` 开始，经过页面的真实 `production flow` 和中间状态转移，最终断言 `terminal state` 及必要的 `side effects`。按 `initial state -> actions/intermediate states -> terminal state` 组织测试，不以单独断言 selector 命中、message payload、function return value 或 source structure 代替完整流程验证。
+Exercism 测试按被测职责选择范围：单元测试可验证局部判断和边界；涉及页面 workflow 或状态衔接的测试，应覆盖相关的 `initial state -> actions/intermediate states -> terminal state` 及必要副作用。不要要求每个页面测试都重复完整流程，也不要用 source structure 断言代替行为验证。
 
-- 覆盖用户可观察的关键状态转换，例如 `available -> /edit -> started`、`iterated -> Mark as complete -> Confirm -> completed`、编辑页 `Continue dialog -> no dialog`，以及 `Run Tests -> Submit -> iterated`。
-- 可以 stub 外部的 DOM、timing 和 Chrome API boundaries，但必须运行实际的 page script、service-worker message listener 和 adapter，也就是该用例的 `system under test (SUT)`；不能 mock 掉正在验证的状态转换环节。
-- 断言 `terminal state`，并检查与该流程直接相关的 `side effects`；只保留保护不同状态转换、failure boundaries 或 stable contracts 的测试。多个测试重复覆盖同一流程时，应合并为清晰的 state scenario，避免堆叠 implementation-detail tests。
-- 实际 DOM 和 routing behavior 需要通过浏览器 MCP 探测；模拟测试用于验证 production flow，不能称作真实浏览器 `end-to-end (E2E) test`。
+- 涉及状态机或跨模块衔接时，覆盖与改动相关的状态转换，例如 `available -> /edit`、`iterated -> completed` 或 `Run Tests -> Submit`；局部改动不需要无关状态全覆盖。
+- 可以 stub 被测范围之外的 DOM、timing 和 Chrome API boundary；对 workflow 测试，保留正在验证的实际流程，避免 mock 掉关键转换本身。
+- 断言本次行为的结果和必要副作用。只有覆盖不同风险或边界时才保留重复场景；实际 DOM 和 routing 行为需要浏览器验证，模拟测试不能称为真实浏览器 E2E。
 
 ### 测试命令
 
@@ -340,7 +343,7 @@ GitHub Release 仅上传 CRX。ZIP 仍会生成并保留在本地 `.build/`，�
 
 禁止在日常开发、功能修改和提交前验证中运行 `npm run test:all`。全量测试耗时过长；必须先从 `tests/` 中按改动职责选择最小覆盖测试，并优先使用对应的 `test:unit`、`test:routing` 或 `test:contracts`。只有用户明确要求全量测试时才可运行 `test:all`。
 
-最小回归必须覆盖：支持站点路由、恶意/不支持 URL、prompt 过滤，以及 Exercism 各关键页面流程的状态闭环（`available/started/iterated/completed`、`Exercise Solved`、编辑页提交链、overview 完成确认链）。
+回归范围由改动决定：选择能覆盖本次行为及其关键失败边界的最小测试；只有触及对应路由、prompt 或 Exercism 状态流程时，才扩展到那些场景。
 
 ### 关键维护规则
 
@@ -349,4 +352,4 @@ GitHub Release 仅上传 CRX。ZIP 仍会生成并保留在本地 `.build/`，�
 - Exercism 的 Turbo 导航不会重新注入 content script，因此持续行为必须监听 Turbo 事件和 DOM 变化。
 - Alt 返回路由按 LLM Tab 隔离；来源页关闭后删除该路由，不恢复到其它标签页，直到下一次 send-context 建立新路由。
 - 快捷键遵循“按住只触发一次、释放立即解锁”；固定超时只做异常恢复，不能用短计时器模拟按键节流。
-- 固定 selector、状态定义和快捷键 action 名属于契约；变量名、日志和内部 helper 属于实现细节。
+- 外部可观察行为和稳定接口才是契约。selector、状态探测方式、内部变量、日志和 helper 属于实现细节；快捷键 action 名只有在构成稳定外部接口时才按契约维护。

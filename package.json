@@ -26,6 +26,8 @@
     "test:contracts": "node --test tests/global-extension-contract.test.js",
     "pretest:version": "npm run build:extension",
     "test:version": "node --test tests/version-contract.test.js",
+    "pretest:smart-return": "npm run build:extension",
+    "test:smart-return": "node --test tests/worker/smart-return-workflow.test.js",
     "predev:check": "npm run build:extension",
     "smoke": "node tests/deprecated/browser-smoke.test.js"
   },

@@ -113,11 +113,30 @@ namespace SmartReturn {
                     "code.replaced",
                     { platform: route.sourcePlatform || "", sourceTabId: targetTab.id }
                 );
-                await submitReturnedCode(targetTab.id);
+                void submitReturnedCode(targetTab.id)
+                    .then(() => {
+                        (globalThis as any).CodingSite2LlmDiagnostics.log(
+                            "smart-return",
+                            operationId,
+                            "adapter-submit.completed",
+                            { sourceTabId: targetTab.id }
+                        );
+                    })
+                    .catch(error => {
+                        (globalThis as any).CodingSite2LlmDiagnostics.log(
+                            "smart-return",
+                            operationId,
+                            "adapter-submit.failed",
+                            {
+                                sourceTabId: targetTab.id,
+                                errorName: error instanceof Error ? error.name : "UnknownError"
+                            }
+                        );
+                    });
                 (globalThis as any).CodingSite2LlmDiagnostics.log(
                     "smart-return",
                     operationId,
-                    "code.submitted",
+                    "adapter-submit.started",
                     { platform: route.sourcePlatform || "", sourceTabId: targetTab.id }
                 );
             }

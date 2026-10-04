@@ -4,7 +4,32 @@ const path = require("node:path");
 
 const vm = require("node:vm");
 
-const ROOT_DIR = path.join(__dirname, "..", "dist");
+const PROJECT_ROOT = path.join(__dirname, "..");
+const ROOT_DIR = path.join(PROJECT_ROOT, "dist");
+const BUILD_FINGERPRINT_PATH = path.join(ROOT_DIR, ".build-fingerprint");
+const { getExtensionBuildFingerprint } = require(path.join(
+    PROJECT_ROOT,
+    ".build",
+    "build-extension.js"
+));
+
+function assertExtensionBuildIsCurrent() {
+    let builtFingerprint = "";
+    try {
+        builtFingerprint = fs.readFileSync(BUILD_FINGERPRINT_PATH, "utf8").trim();
+    } catch (_) {
+        // The error below explains how to generate the required build.
+    }
+
+    if (builtFingerprint !== getExtensionBuildFingerprint(PROJECT_ROOT)) {
+        throw new Error(
+            "Worker tests load generated dist/ files, but dist is missing or stale. " +
+            "Run `npm run build:extension` first, or use an npm test script with a pretest build."
+        );
+    }
+}
+
+assertExtensionBuildIsCurrent();
 
 function loadCoreWorker() {
     const tabState = [];
