@@ -16,6 +16,8 @@ const DEFAULT_SEND_CONTEXT_SHORTCUT = "Alt+Q";
 const toggle = document.getElementById("exercism-open-new-exercise-in-editor");
 const providerSelect = document.getElementById("llm-provider");
 const sendButton = document.getElementById("send-context");
+const reloadExtensionButton = document.getElementById("reload-extension");
+const refreshAffectedPagesButton = document.getElementById("refresh-affected-pages");
 const status = document.getElementById("status");
 const dailyPracticeList = document.getElementById("daily-practice-links");
 const dailyPracticeAddButton = document.getElementById("daily-practice-add");
@@ -220,6 +222,30 @@ function showStatus(text, sticky = false) {
     }
 }
 
+refreshAffectedPagesButton.addEventListener("click", async () => {
+    refreshAffectedPagesButton.disabled = true;
+
+    try {
+        const tabs = await chrome.tabs.query({});
+        const affectedTabs = tabs.filter(tab =>
+            typeof tab.id === "number" && /^https?:\/\//i.test(tab.url || "")
+        );
+        const results = await Promise.allSettled(
+            affectedTabs.map(tab => chrome.tabs.reload(tab.id))
+        );
+        const failures = results.filter(result => result.status === "rejected").length;
+
+        showStatus(failures
+            ? `Refreshed ${affectedTabs.length - failures} pages; ${failures} failed.`
+            : `Refreshed ${affectedTabs.length} affected pages.`
+        );
+    } catch (error) {
+        showStatus("Could not refresh pages: " + (error?.message || error), true);
+    } finally {
+        refreshAffectedPagesButton.disabled = false;
+    }
+});
+
 async function renderToggle() {
     const stored = await chrome.storage.local.get(
         EXERCISM_OPEN_NEW_EXERCISE_IN_EDITOR_SETTING_KEY
@@ -268,6 +294,10 @@ providerSelect.addEventListener("change", async () => {
 
 document.getElementById("manage-llm-providers").addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
+});
+
+reloadExtensionButton.addEventListener("click", () => {
+    chrome.runtime.reload();
 });
 
 toggle.addEventListener("change", async () => {

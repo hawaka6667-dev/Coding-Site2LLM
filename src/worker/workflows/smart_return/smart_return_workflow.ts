@@ -6,6 +6,12 @@ contract: only consume the route revision selected for the current LLM tab cycle
 
 namespace SmartReturn {
     const runningCycles = new Map<number, Promise<void>>();
+    const RETURN_PAYLOAD_RETRY_COUNT = 2;
+    const RETURN_PAYLOAD_RETRY_DELAY_MS = 100;      //点两下的修复
+
+    function waitForReturnPayloadRetry() {
+        return new Promise(resolve => setTimeout(resolve, RETURN_PAYLOAD_RETRY_DELAY_MS));
+    }
 
     async function returnToCodingPage(
         llmTab: chrome.tabs.Tab,
@@ -25,31 +31,6 @@ namespace SmartReturn {
 
         const tabs = await chrome.tabs.query({ windowId: llmTab.windowId });
         const sourceTab = tabs.find(tab => tab.id === route.sourceTabId);
-        const maintainedIdentity = route.sourceIdentity || getCodingPageIdentity(
-            route.sourceUrl || "",
-            route.sourcePlatform || ""
-        );
-
-        if (sourceTab?.url && maintainedIdentity) {
-            const sourceIdentity = getCodingPageIdentity(
-                sourceTab.url,
-                route.sourcePlatform || ""
-            );
-
-            if (!sourceIdentity || sourceIdentity !== maintainedIdentity) {
-                const cleared = await routes.clearIfCurrent(route);
-                (globalThis as any).CodingSite2LlmDiagnostics.log(
-                    "smart-return",
-                    operationId,
-                    cleared ? "route.invalidated" : "workflow.skipped",
-                    {
-                        reason: cleared ? "source-identity-changed" : "route-changed",
-                        sourceTabId: route.sourceTabId
-                    }
-                );
-                return;
-            }
-        }
 
         const targetTab = sourceTab;
 
@@ -67,7 +48,7 @@ namespace SmartReturn {
             return;
         }
 
-        const routedRoute = await routes.updateIfCurrent(route, {
+        let routedRoute: Route | null = await routes.updateIfCurrent(route, {
             sourceTabId: targetTab.id,
             status: "routed"
         });
@@ -89,13 +70,31 @@ namespace SmartReturn {
         );
 
         try {
-            const clipboardText = await readClipboard(llmTab.id);
-            const copiedText = routedRoute.copiedText || clipboardText;
-            const paste = routedRoute.copied
+            let clipboardText = await readClipboard(llmTab.id);
+            let copiedText = routedRoute.copiedText || clipboardText;
+            let paste = routedRoute.copied
                 ? copiedText
                 : isLikelyCode(clipboardText)
                     ? clipboardText
                     : "";
+
+            for (let attempt = 0; !paste && attempt < RETURN_PAYLOAD_RETRY_COUNT; attempt += 1) {
+                await waitForReturnPayloadRetry();
+                const latestRoute = await routes.get(llmTab.windowId, llmTab.id);
+                if (!latestRoute || latestRoute.sourceTabId !== targetTab.id) {
+                    break;
+                }
+
+                routedRoute = latestRoute;
+                clipboardText = await readClipboard(llmTab.id);
+                copiedText = routedRoute.copiedText || clipboardText;
+                paste = routedRoute.copied
+                    ? copiedText
+                    : isLikelyCode(clipboardText)
+                        ? clipboardText
+                        : "";
+            }
+
             (globalThis as any).CodingSite2LlmDiagnostics.log(
                 "smart-return",
                 operationId,

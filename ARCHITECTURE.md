@@ -1,6 +1,6 @@
 # Architecture
 //This document lists the project directory structure and file names only.
-//暂时停更 改为手动
+//暂时停更 pause 改为手动 mannual
 
 ```text
 Coding-Site2LLM/

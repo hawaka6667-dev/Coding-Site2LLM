@@ -14,6 +14,8 @@ const SUBMITTED_OVERVIEW_AUTO_MARK_COMPLETE_SETTING_KEY = "exercismAutoMarkCompl
 let submittedOverviewEditorReturnTarget = "";
 let submittedOverviewBackLinkTarget = "";
 let submittedOverviewSubmitStartedAt = 0;
+// Keep one overview request active for this submit/redirect cycle.
+let submittedOverviewOpenInProgress = false;
 
 function getSubmittedOverviewEditorUrl(value) {
     try {
@@ -93,6 +95,11 @@ function consumeSubmittedOverviewRedirectTarget(overviewUrl) {
 }
 
 async function openSubmittedOverviewAndKeepEditor(target, navigateToOverviewOnFailure) {
+    if (submittedOverviewOpenInProgress) {
+        return;
+    }
+    submittedOverviewOpenInProgress = true;
+
     let opened = false;
 
     try {
@@ -112,9 +119,13 @@ async function openSubmittedOverviewAndKeepEditor(target, navigateToOverviewOnFa
     }
 
     if (opened) {
+        submittedOverviewOpenInProgress = false;
         location.replace(target.editorUrl);
     } else if (navigateToOverviewOnFailure) {
+        submittedOverviewOpenInProgress = false;
         location.replace(target.overviewUrl);
+    } else {
+        submittedOverviewOpenInProgress = false;
     }
 }
 
@@ -123,7 +134,7 @@ document.addEventListener("click", event => {
         SUBMITTED_OVERVIEW_SUBMIT_BUTTON_SELECTOR
     );
 
-    if (!button || button.disabled) {
+    if (!button || button.disabled || submittedOverviewOpenInProgress) {
         return;
     }
 
@@ -133,6 +144,11 @@ document.addEventListener("click", event => {
 }, true);
 
 document.addEventListener("turbo:before-visit", event => {
+    if (submittedOverviewOpenInProgress) {
+        event.preventDefault();
+        return;
+    }
+
     const target = consumeSubmittedOverviewRedirectTarget(event.detail?.url);
 
     if (!target) {

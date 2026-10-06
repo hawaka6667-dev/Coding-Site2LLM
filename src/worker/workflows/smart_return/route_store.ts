@@ -91,37 +91,6 @@ namespace SmartReturn {
             return Boolean(savedRoute);
         }
 
-        invalidateSourceUrlChange(tabId: number, url: string) {
-            return this.mutate(async () => {
-                const routes = await this.loadAll();
-                let changed = false;
-
-                for (const [key, route] of Object.entries(routes)) {
-                    if (route.sourceTabId !== tabId || route.sourceUrl === url) {
-                        continue;
-                    }
-
-                    const previousIdentity = route.sourceIdentity ||
-                        getCodingPageIdentity(route.sourceUrl || "", route.sourcePlatform || "");
-                    const identityPlatform = route.sourcePlatform === "Exercism overview"
-                        ? "Exercism"
-                        : route.sourcePlatform || "";
-                    const nextIdentity = getCodingPageIdentity(url, identityPlatform);
-
-                    if (previousIdentity && previousIdentity === nextIdentity) {
-                        continue;
-                    }
-
-                    delete routes[key];
-                    changed = true;
-                }
-
-                if (changed) {
-                    await this.persist(routes);
-                }
-            });
-        }
-
         removeTab(tabId: number, windowId: number) {
             return this.mutate(async () => {
                 const routes = await this.loadAll();

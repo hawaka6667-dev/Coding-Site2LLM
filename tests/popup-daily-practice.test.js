@@ -42,6 +42,7 @@ async function loadPopup(initialStorage = {}) {
     const elements = new Map();
     const storedValues = { ...initialStorage };
     const openedTabs = [];
+    let reloads = 0;
     const getElementById = id => {
         if (!elements.has(id)) {
             elements.set(id, createElement());
@@ -74,7 +75,10 @@ async function loadPopup(initialStorage = {}) {
                     openedTabs.push(details);
                 }
             },
-            runtime: { async sendMessage() { return { ok: true }; } }
+            runtime: {
+                async sendMessage() { return { ok: true }; },
+                reload() { reloads += 1; }
+            }
         },
         setTimeout: () => 1,
         clearTimeout() {}
@@ -88,8 +92,16 @@ async function loadPopup(initialStorage = {}) {
         );
     }
     await context.loadCustomDailyPracticeProviders();
-    return { context, elements, storedValues, openedTabs };
+    return { context, elements, storedValues, openedTabs, get reloads() { return reloads; } };
 }
+
+test("reloads the extension from the popup control", async () => {
+    const popup = await loadPopup();
+
+    await popup.elements.get("reload-extension").dispatch("click");
+
+    assert.equal(popup.reloads, 1);
+});
 
 test("adds a custom URL with a detected label, then removes it", async () => {
     const { elements, storedValues } = await loadPopup();
@@ -104,17 +116,21 @@ test("adds a custom URL with a detected label, then removes it", async () => {
     );
     assert.equal(savedProviders[0].label, "AtCoder");
     assert.equal(savedProviders[0].url, "https://www.atcoder.jp/contests/abc");
-    assert.equal(elements.get("daily-practice-links").children.length, 6);
+    assert.equal(elements.get("daily-practice-links").children.length, 7);
 
-    const customItem = elements.get("daily-practice-links").children[5];
+    const customItem = elements.get("daily-practice-links").children[6];
     await customItem.children[1].dispatch("click");
 
     assert.equal(storedValues.dailyPracticeCustomProviders.length, 0);
-    assert.equal(elements.get("daily-practice-links").children.length, 5);
+    assert.equal(elements.get("daily-practice-links").children.length, 6);
 });
 
 test("opens destinations individually and with the Open all control", async () => {
     const { elements, openedTabs } = await loadPopup();
+    assert.equal(
+        elements.get("daily-practice-links").children[5].children[0].textContent,
+        "Learn Code Fast ⚡" //deprecated
+    );
     const input = elements.get("daily-practice-url");
     input.value = "https://example.org/daily";
     await elements.get("daily-practice-form").dispatch("submit");
@@ -124,11 +140,12 @@ test("opens destinations individually and with the Open all control", async () =
     }
     await elements.get("daily-practice-open-all").dispatch("click");
 
-    assert.equal(openedTabs.length, 12);
+    assert.equal(openedTabs.length, 14);
     assert.ok(openedTabs.some(tab => tab.url === "https://example.org/daily"));
     assert.ok(openedTabs.some(tab => tab.url.startsWith("https://leetcode.com/")));
     assert.ok(openedTabs.some(tab => tab.url === "https://www.codewars.com/dashboard"));
     assert.ok(openedTabs.some(tab => tab.url === "https://regexone.com/"));
+    assert.ok(openedTabs.some(tab => tab.url === "https://learncodefast.org/"));
 });
 
 test("rejects non-web URLs", async () => {
@@ -160,4 +177,3 @@ test("submits a custom URL when Enter is pressed", async () => {
 
     assert.equal(storedValues.dailyPracticeCustomProviders[0].url, "https://baidu.com/");
 });
-

@@ -1,7 +1,7 @@
 /* @machine
-file: tests/exercism/edit/continue-dialogs.test.js
-role: verify Exercism Continue dialog transitions
-run: npm run test:unit
+file: tests/exercism/track/donation-modal.test.js
+role: verify Exercism track donation dialog dismissal
+run: node --test tests/exercism/track/donation-modal.test.js
 */
 
 const assert = require("node:assert/strict");
@@ -9,11 +9,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
-const { ROOT_DIR } = require("../../worker-test-harness.js");
 
-test("transitions Exercism edit page from Continue dialogs to no dialog state", () => {
+const PROJECT_ROOT = path.join(__dirname, "..", "..", "..");
+
+test("dismisses only the enabled Continue without donating button in a visible dialog", () => {
     const mutationCallbacks = [];
-        let observerOptions;
 
     class Element {
         constructor(tagName, innerText = "", options = {}) {
@@ -21,6 +21,7 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
             this.innerText = innerText;
             this.disabled = options.disabled || false;
             this.attributes = options.attributes || {};
+            this.visible = options.visible !== false;
             this.children = [];
             this.parentElement = null;
             this.clickCount = 0;
@@ -29,6 +30,7 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
         append(child) {
             child.parentElement = this;
             this.children.push(child);
+            mutationCallbacks.forEach(callback => callback());
             return child;
         }
 
@@ -45,7 +47,7 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
         }
 
         getBoundingClientRect() {
-            return { width: 100, height: 30 };
+            return this.visible ? { width: 100, height: 30 } : { width: 0, height: 0 };
         }
 
         getAttribute(name) {
@@ -85,78 +87,65 @@ test("transitions Exercism edit page from Continue dialogs to no dialog state", 
         }
     }
 
-    const body = new Element("body");
     const documentElement = new Element("html");
-    documentElement.append(body);
+    const body = documentElement.append(new Element("body"));
     const context = vm.createContext({
         document: {
-            body,
             documentElement,
             addEventListener: () => {},
-            querySelectorAll: selector => body.querySelectorAll(selector)
+            querySelectorAll: selector => documentElement.querySelectorAll(selector)
         },
         MutationObserver: class {
             constructor(callback) {
                 mutationCallbacks.push(callback);
             }
-                observe(_target, options) {
-                    observerOptions = options;
-                }
+
+            observe() {}
         }
     });
 
     vm.runInContext(
         fs.readFileSync(
-            path.join(ROOT_DIR, "worker", "exercism", "dismiss_dialogs.js"),
+            path.join(
+                PROJECT_ROOT,
+                "src",
+                "worker",
+                "exercism",
+                "dismiss_dialogs.js"
+            ),
             "utf8"
         ),
         context
     );
 
-    const addDialog = (title, buttonLabel = "Continue", buttonOptions = {}) => {
-        const dialog = body.append(new Element("section", "", {
-            attributes: { role: "dialog" }
+    const makeDialog = (buttonLabel, options = {}) => {
+        const dialog = body.append(new Element("div", "", {
+            attributes: { role: "dialog" },
+            visible: options.dialogVisible !== false
         }));
-        dialog.append(new Element("h2", title));
-        return {
-            dialog,
-            button: dialog.append(new Element("button", buttonLabel, buttonOptions))
-        };
+        const button = dialog.append(new Element("button", buttonLabel, options));
+        return { dialog, button };
     };
-    const tutorial = addDialog("Dig Deeper into Reverse String!");
-    const feedback = addDialog("No Immediate Feedback", "No, thanks!");
-    const delayedFeedback = addDialog(
-        "Automated feedback is still being generated",
-        "Continue without waiting",
-        { disabled: true }
-    );
-    const closeVariant = addDialog("Exercism update", "×", {
-        attributes: { "aria-label": "Close dialog" }
+
+    const donationContinue = makeDialog("Continue without donating");
+    const noThanks = makeDialog("No, thanks!");
+    const nonDismissiveAction = makeDialog("Donate now");
+    const disabledDonationContinue = makeDialog("Continue without donating", { disabled: true });
+    const hiddenDonationContinue = makeDialog("Continue without donating", { visible: false });
+    const ariaDisabledDonationContinue = makeDialog("Continue without donating", {
+        attributes: { "aria-disabled": "true" }
     });
-    const requestReview = feedback.dialog.append(
-        new Element("button", "Request code review")
-    );
-    const disabledContinue = body.append(
-        new Element("button", "Continue", { disabled: true })
-    );
-    const donationContinue = body.append(new Element("button", "Continue"));
+    const hiddenDialogContinue = makeDialog("Continue without donating", {
+        dialogVisible: false
+    });
 
-    assert.equal(observerOptions.attributes, true);
-    assert.deepEqual(Array.from(observerOptions.attributeFilter), ["disabled", "aria-disabled"]);
-    assert.equal(body.querySelectorAll("[role='dialog']").length, 4);
-    mutationCallbacks[0]();
-
-    assert.equal(body.querySelectorAll("[role='dialog']").length, 1);
-    assert.equal(tutorial.button.clickCount, 1);
-    assert.equal(feedback.button.clickCount, 1);
-    assert.equal(closeVariant.button.clickCount, 1);
-    assert.equal(delayedFeedback.button.clickCount, 0);
-    delayedFeedback.button.disabled = false;
-    mutationCallbacks[0]();
-
-    assert.equal(body.querySelectorAll("[role='dialog']").length, 0);
-    assert.equal(delayedFeedback.button.clickCount, 1);
-    assert.equal(requestReview.clickCount, 0);
-    assert.equal(disabledContinue.clickCount, 0);
-    assert.equal(donationContinue.clickCount, 0);
+    assert.equal(donationContinue.button.clickCount, 1);
+    assert.equal(noThanks.button.clickCount, 1);
+    assert.equal(nonDismissiveAction.button.clickCount, 0);
+    assert.equal(disabledDonationContinue.button.clickCount, 0);
+    assert.equal(hiddenDonationContinue.button.clickCount, 0);
+    assert.equal(ariaDisabledDonationContinue.button.clickCount, 0);
+    assert.equal(hiddenDialogContinue.button.clickCount, 0);
+    assert.equal(donationContinue.dialog.parentElement, null);
+    assert.equal(noThanks.dialog.parentElement, null);
 });

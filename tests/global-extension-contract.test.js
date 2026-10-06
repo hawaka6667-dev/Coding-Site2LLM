@@ -178,7 +178,6 @@ test("keeps extension commands and content scripts registered", () => {
         "worker/exercism/edit/content.js",
         "worker/exercism/edit/auto_submit_after_manual_run.js",
         "worker/exercism/submitted_overview/open_submitted_overview_after_submit.js",
-        "worker/exercism/edit/continue_after_exercism_modals.js",
         "worker/exercism/overview/auto_mark_exercise_complete.js"
     ]);
     assert.deepEqual(
@@ -190,6 +189,17 @@ test("keeps extension commands and content scripts registered", () => {
         ]
     );
     assert.equal(manifest.commands?.["exercism-test-submit"], undefined);
+});
+
+test("injects the Exercism modal handler on track pages", () => {
+    const manifest = readManifest();
+    const modalScripts = manifest.content_scripts.filter(script =>
+        script.js.includes("worker/exercism/dismiss_dialogs.js")
+    );
+
+    assert.equal(modalScripts.length, 1);
+    assert.deepEqual(modalScripts[0].matches, ["https://exercism.org/tracks/*"]);
+    assert.equal(modalScripts[0].run_at, "document_start");
 });
 
 test("keeps the general options page wired to implemented Exercism features", () => {

@@ -16,6 +16,8 @@ test("returns to the same Exercism editor after the submitted overview window op
     const listeners = [];
     const replacements = [];
     const messages = [];
+    let resolveWindowRequest;
+    let deferFirstWindowRequest = true;
     const backToExerciseLink = {
         innerText: "Back to Exercise",
         href: "https://exercism.org/tracks/python/exercises/pov?from=editor",
@@ -39,6 +41,12 @@ test("returns to the same Exercism editor after the submitted overview window op
                 onMessage: { addListener: () => {} },
                 sendMessage: message => {
                     messages.push(message);
+                    if (deferFirstWindowRequest) {
+                        deferFirstWindowRequest = false;
+                        return new Promise(resolve => {
+                            resolveWindowRequest = resolve;
+                        });
+                    }
                     return Promise.resolve({ opened: true });
                 }
             }
@@ -85,6 +93,19 @@ test("returns to the same Exercism editor after the submitted overview window op
         }
     };
     beforeVisitListener.listener(overviewVisit);
+    await new Promise(resolve => setImmediate(resolve));
+
+    submitClickListener.listener(clickEvent);
+    const duplicateOverviewVisit = {
+        detail: { url: "https://exercism.org/tracks/python/exercises/pov" },
+        prevented: false,
+        preventDefault() { this.prevented = true; }
+    };
+    beforeVisitListener.listener(duplicateOverviewVisit);
+    assert.equal(duplicateOverviewVisit.prevented, true);
+    assert.equal(messages.length, 1);
+
+    resolveWindowRequest({ opened: true });
     await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(overviewVisit.prevented, true);

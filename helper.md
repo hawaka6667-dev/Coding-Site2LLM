@@ -45,15 +45,16 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/workflows/smart_return/smart_return_workflow.ts`, `src/worker/workflows/exercism_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/submitted_overview/open_submitted_overview_after_submit.js` | `npm run test:unit` 和 `npm run test:routing` |
 | Smart Return route lifecycle and code write-back | `src/worker/workflows/smart_return/`, `src/worker/adapters/` | `npm run test:unit` |
 | Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/workflows/smart_return/smart_return_workflow.ts` | `npm run test:unit` |
-| Exercism Continue dialogs | `src/worker/exercism/edit/continue_after_exercism_modals.js`, `tests/exercism/edit/continue-dialogs.test.js` | `npm run test:unit` |
+| Exercism modal dismissal | `src/worker/exercism/dismiss_dialogs.js`, `tests/exercism/edit/continue-dialogs.test.js`, `tests/exercism/track/donation-modal.test.js` | `npm run test:unit` 和 `npm run test:contracts` |
 | core workflow operation logs and debug-module refactor | `src/worker/debug/` (planned), `src/worker/diagnostics.js`, `src/worker/workflows/`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:unit` 和 `npm run test:routing` |
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
 | SQLBolt Run Query shortcut | `src/worker/sqlbolt/run_query.js`, `src/manifest.json` | `npm run test:unit` 和 `npm run test:contracts` |
+| LearnCodeFast 课程页自动化 | `src/worker/learncodefast/course_page_automation.js`, `src/manifest.json` | `node --test tests/worker/learncodefast-mark-complete.test.js` 和 `npm run test:contracts` |
 | LLM provider options, popup selection and routing | `src/options/options.js`, `src/popup/popup.js`, `src/worker/configure_supported_coding_sites_and_llm_providers.ts`, `src/worker/workflows/run_coding_context_to_llm_workflow.ts` | `npm run test:unit`, `npm run test:routing`, `npm run test:contracts` |
 | extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
 | development environment and generated package | `tests/dev-check.ps1`, `package.json`, `src/manifest.json`, `dist/` | `npm run dev:check` |
 
-`dev:check` 检查 repository entry points、manifest 和 Chrome process。浏览器实时状态直接通过 Chrome DevTools MCP 的 `list_pages` 查看；不需要导出、保存或维护快照文件。
+`dev:check` 检查 repository entry points、manifest 和 Chrome process。`npm run reload:extension` 在构建后检查 unpacked extension 是否就绪，并提醒调用 Chrome DevTools MCP 的 `reload_extension`；它不声称已完成 MCP reload，也不刷新网页。浏览器实时状态直接通过 Chrome DevTools MCP 的 `list_pages` 查看；不需要导出、保存或维护快照文件。
 
 ### 标准验证顺序
 
@@ -78,7 +79,7 @@ MCP 是 debugging probe，不是 production dependency。先观察 live runtime�
 
 检查页面切换时，先区分整页 hard navigation 与 SPA/Turbo client-side navigation。后者可在不重建 document、不重新注入 content script 的情况下改变 URL、题目内容和 editor DOM；不能仅凭 tab id 不变或 URL 改变，就假设脚本、页面状态或编辑器已刷新。
 
-跨页面维护路由按题目身份而非完整 URL 判断：同 URL 刷新以及同题的 SPA/Turbo 路由变化都保留维护；身份变化才删除整条路由和旧复制 payload。LeetCode 同一 problem slug 的根页、query/hash 和 `/submissions/...` 属于同题；submission 页面上下文使用 LeetCode adapter 提取，描述面板未挂载时从同源 `/description/` 文档读取题面，并从可见 submission detail 提取 verdict 与 `Last Executed Input`；Smart Return 当前只返回发送时记录的原标签页，不自动寻找同题根页 editor。LeetCode 专用编辑目标选择不属于通用 Smart Return 路由。Exercism overview 与 `/edit` 使用同一 track/exercise 身份；Codewars 使用 kata 与训练语言身份。其它 HTTP(S) 来源按完整 URL 区分。Chromium 的 History API 客户端导航使用 `webNavigation.onHistoryStateUpdated` 探测，并限制在主 frame；该 API 需要 manifest 的 `webNavigation` permission。
+跨页面维护路由按来源标签页绑定，不按域名、完整 URL 或题目身份失效：来源 tab 在站点、课程或 URL 间导航时，Smart Return 仍保留原 `sourceTabId`；只有来源 tab 或 LLM tab 被关闭时才清除 route 和关联复制 payload。Smart Return 执行时只激活 route 记录的来源 tab，并在当前 tab 上执行现有页面能力；不自动寻找替代 tab。LeetCode、Exercism 和 Codewars 的题目身份仍由各自 adapter 负责编辑器目标和站点内行为，不再作为通用 Smart Return route 的生命周期条件。
 
 推荐探测顺序：
 
@@ -169,7 +170,7 @@ smart-return  : LLM page -> source coding page
 
 LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当前 coding 页记录为该 LLM 页的当前返回页；来源页关闭后删除该路由和关联复制文本，不跳转到其它标签页；下一次显式发送再建立新路由。
 
-返回路由是用户通过 `send-context`（默认 Alt+Q；popup 使用同一 workflow）明确建立的维护授权，按 `windowId + llmTabId` 关联到发送时的 source tab、URL 和题目身份。硬导航、History API 和 hash 导航都按站点身份比较；同题 URL 变化保留维护，身份变化删除整条路由和旧复制 payload。失效前必须回查 source tab 当前 URL；若它已不同于导航事件 URL，则忽略过期通知。Smart Return 执行前再次比较当前 source 身份，阻止导航事件竞态把旧 payload 写入新题。
+返回路由是用户通过 `send-context`（默认 Alt+Q；popup 使用同一 workflow）明确建立的维护授权，按 `windowId + llmTabId` 关联到发送时的 source tab。来源 tab 的硬导航、History API 和 hash 导航不会删除 route；Smart Return 执行时重新查询并激活同一个 `sourceTabId`。来源 tab 或 LLM tab 关闭时，才清除对应 route 和复制 payload；不跳转到其它标签页。
 
 | 站点 | 维护身份 | 编辑目标约束 |
 | --- | --- | --- |
@@ -178,7 +179,7 @@ LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当�
 | Codewars | kata slug + train language | 只能使用同一身份的训练页 |
 | 其它 HTTP(S) 来源 | 完整 URL | 不跨 URL 猜测题目身份 |
 
-Smart Return 只激活路由记录的 `sourceTabId`，不按平台、题目身份或标签页位置选择替代页。source tab 关闭或回跳时已不存在，则清除对应路由及复制 payload，不跳转；只有下一次显式 `send-context` 才建立新路由。LeetCode 等站点需要不同编辑目标时，由站点专用逻辑另行实现，不扩展通用路由的候选查找。
+Smart Return 只激活路由记录的 `sourceTabId`，不按平台、题目身份或标签页位置选择替代页。source tab 关闭或已不存在，则清除对应路由及复制 payload，不跳转；只有下一次显式 `send-context` 才建立新路由。来源 tab 换域名或课程页面不会清除 route，但当前页面是否支持代码回填和站点测试仍由对应 adapter 决定。
 
 Exercism `/edit` 的 Smart Return 使用可见 `.cm-editor .cm-content[contenteditable="true"]`，通过 `execCommand("selectAll")` / `execCommand("insertText")` 和 input/change 事件写入 CodeMirror；不能以直接赋值 `textContent` 作为成功回填，因为这不保证编辑器 model 已更新。插入命令失败时应终止本轮，不提交可能未更新的代码。
 
@@ -216,11 +217,11 @@ Smart Return 成功回填后启动的站点测试/提交属于 adapter 的独立
 | `worker/llm_copy_tracker.js` | 在 HTTP(S) 页面转发显式复制文本，供已建立的 Smart Return route 使用 | provider 管理、route 存储 |
 | `worker/sqlbolt/run_query.js` | 仅在 SQLBolt lesson 的编辑器聚焦时，将 Ctrl+Enter 转发到同一编辑器容器的 `RUN QUERY` 链接 | SQLBolt 页面以外的快捷键、其它站点编辑器 |
 | `worker/workflows/exercism_workflow.ts` | 协调 Exercism test-submit、受管 overview 窗口、Mark as complete 和 concepts 刷新 | 页面 selector 和 overview/edit 页面状态判断 |
-| `submitted_overview/open_submitted_overview_after_submit.js` | 仅在 edit 页捕获 Submit；提交后的 Turbo 导航目标为同题 overview 或同题 `/edit` 时，按设置请求创建不抢焦点的 overview 窗口，并保留原标签页中的 editor | Chrome 窗口 API、overview 完成和普通 overview 路由 |
+| `submitted_overview/open_submitted_overview_after_submit.js` | 仅在 edit 页捕获 Submit；同一次提交/redirect cycle 中重复 click 或 Turbo 事件只触发一次窗口创建请求；按设置打开不抢焦点 overview 并保留原标签页中的 editor | Chrome 窗口 API、overview 完成和普通 overview 路由 |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |
 | `auto_mark_exercise_complete.js` | 在 overview URL 发现可用的 `Mark as complete` 并请求完成链；也预先注入 Exercism `/edit` 文档以监听返回 overview 的 Turbo 导航 | 是否进入 `/edit` |
 | `auto_submit_after_manual_run.js` | 监听用户 Run Tests 并请求提交链 | overview 跳转和完成按钮 |
-| `continue_after_exercism_modals.js` | 关闭 edit 页上可见、可用的 `Continue` 弹窗 | Submit 和 overview completion |
+| `dismiss_dialogs.js` | 在所有 Exercism track 页面关闭可见 modal 中明确安全的关闭/稍后/继续按钮 | 普通页面按钮及不明确操作 |
 | `content.js` | 编辑页快捷键桥接 | Exercism 状态推断 |
 
 修改一个模块时，不把另一个模块的 selector、状态缓存或控制条件复制过来。
@@ -278,7 +279,7 @@ Run Tests（按钮可用时）
 - `.lhs-footer .run-tests-btn button`
 - `.lhs-footer .submit-btn button`
 
-`continue_after_exercism_modals.js` 只检查可见 dialog 中的按钮，支持 `Continue` 与 `Continue without waiting`；除 dialog 子节点变化外，还监听 `disabled` 和 `aria-disabled` 属性变化，以便按钮一变为可用就继续。`tests/exercism/edit/continue-dialogs.test.js` 覆盖延迟启用到关闭 dialog 的状态转换。
+`dismiss_dialogs.js` 只检查可见的 `dialog`、`role=dialog` 或 `aria-modal=true` 容器，优先选择明确的关闭、拒绝或稍后文案，并兼容 Exercism 的 `Continue`、`Continue without waiting` 和 donation dismissal 变体；它也监听 Turbo 生命周期、DOM 变化以及 `disabled` / `aria-disabled` 变化。`tests/exercism/edit/continue-dialogs.test.js` 与 `tests/exercism/track/donation-modal.test.js` 覆盖按钮变体、延迟启用和非弹窗/不可用控件保护；manifest contract 检查它在所有 track 路由注册。
 
 自动完成链必须区分 iteration passed 与 exercise completed。`Exercise Solved` 只表示提交的 iteration 通过，不能单独作为完成成功信号；完成链只在 overview 状态为 `completed` 或出现可见的完成结果对话框后返回成功。`tests/exercism/overview/auto-mark-complete.test.js` 覆盖条件按钮出现 → 发起完成请求 → 确认弹窗 → 完成结果输出，并断言结果出现前不刷新 track concepts。
 

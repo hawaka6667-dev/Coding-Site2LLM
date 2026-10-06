@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Coding Site2LLM",
-  "version": "0.5.7.2",
+  "version": "0.5.7.11",
   "description": "Capture coding-site context and send it to an LLM.",
   "icons": {
     "128": "icons/icon128.png"
@@ -44,7 +44,6 @@
         "worker/exercism/edit/content.js",
         "worker/exercism/edit/auto_submit_after_manual_run.js",
         "worker/exercism/submitted_overview/open_submitted_overview_after_submit.js",
-        "worker/exercism/edit/continue_after_exercism_modals.js",
         "worker/exercism/overview/auto_mark_exercise_complete.js"
       ],
       "run_at": "document_start"
@@ -90,11 +89,30 @@
     },
     {
       "matches": [
+        "https://learncodefast.org/courses/*",
+        "https://www.learncodefast.org/courses/*"
+      ],
+      "js": [
+        "worker/learncodefast/course_page_automation.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://exercism.org/tracks/*/concepts*",
         "https://exercism.org/tracks/*/exercises*"
       ],
       "js": [
         "worker/exercism/preserve_track_list_scroll_position.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://exercism.org/tracks/*"
+      ],
+      "js": [
+        "worker/exercism/dismiss_dialogs.js"
       ],
       "run_at": "document_start"
     }

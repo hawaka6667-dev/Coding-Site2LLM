@@ -1,4 +1,14 @@
-设计文档   -  定位是草案
+deprecated
+设计文档   -  定位是草案    
+
+
+forward collision
+
+进度track
+
+
+
+
 //
 // 作用   让llm获得充分的原生网站题目信息
 

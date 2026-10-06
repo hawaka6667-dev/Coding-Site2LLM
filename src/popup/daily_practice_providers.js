@@ -39,5 +39,12 @@ const DAILY_PRACTICE_PROVIDERS = [
         getUrl() {
             return "https://regexone.com/";
         }
+    },
+    {
+        id: "learncodefast",
+        label: "Learn Code Fast⚡",
+        getUrl() {
+            return "https://learncodefast.org/";
+        }
     }
 ];
