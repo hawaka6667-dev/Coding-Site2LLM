@@ -14,6 +14,8 @@
 
 **LeetCode** — I recommend [LeetSense](https://chromewebstore.google.com/detail/leetsense-vs-code-like-au/pncodgcbfbhlmggfokamdcgkoknbphoi), which provides VS Code-like autocomplete and IntelliSense directly in the LeetCode editor.
 
+I recommend https://chromewebstore.google.com/detail/bbmkfioclndokjpilbgnlnandfflpepi to ctrl a precisely
+
 ## Features
 
 # Coding-Site2LLM
