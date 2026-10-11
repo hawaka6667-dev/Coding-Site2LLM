@@ -96,7 +96,10 @@ function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}, se
             storage: { local: { get: async () => ({ codingSite2LlmShortcuts: savedShortcuts }) } },
             runtime: { sendMessage: message => messages.push(message) }
         },
-        document: { addEventListener: (type, listener) => listeners.push({ type, listener }) },
+        document: {
+            visibilityState: "visible",
+            addEventListener: (type, listener) => listeners.push({ type, listener })
+        },
         window: {
             getSelection: () => ({ toString: () => selectedText }),
             addEventListener: (type, listener) => windowListeners.push({ type, listener })

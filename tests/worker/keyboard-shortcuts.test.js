@@ -175,6 +175,59 @@ test("clears a stale page lock when the original page regains focus", () => {
     ]);
 });
 
+test("releases the page lock when Smart Return moves focus away before keyup", () => {
+    const { listeners, messages, windowListeners } = loadKeyboardShortcuts("chat.deepseek.com");
+    const keydown = listeners.find(listener => listener.type === "keydown").listener;
+    const blur = windowListeners.find(listener => listener.type === "blur").listener;
+    const press = () => keydown({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat: false,
+        preventDefault() {},
+        stopPropagation() {}
+    });
+
+    press();
+    blur();
+    press();
+
+    assert.deepEqual(messages.map(message => message.type), [
+        "keyboard-shortcut",
+        "keyboard-shortcut-release",
+        "keyboard-shortcut"
+    ]);
+});
+
+test("recovers a stale page lock when tab switching emits no blur or keyup", async () => {
+    const { listeners, messages } = loadKeyboardShortcuts("chat.deepseek.com");
+    const keydown = listeners.find(listener => listener.type === "keydown").listener;
+    const press = () => keydown({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat: false,
+        preventDefault() {},
+        stopPropagation() {}
+    });
+
+    press();
+    await new Promise(resolve => setTimeout(resolve, 1050));
+    press();
+
+    assert.deepEqual(messages.map(message => message.type), [
+        "keyboard-shortcut",
+        "keyboard-shortcut-release",
+        "keyboard-shortcut"
+    ]);
+});
+
 test("includes selected page text in the send-context shortcut message", () => {
     const { listeners, messages } = loadKeyboardShortcuts(
         "example.com",

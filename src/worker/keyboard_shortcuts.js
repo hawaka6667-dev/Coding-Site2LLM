@@ -17,8 +17,10 @@ const LLM_HOSTS = new Set([
     "gemini.google.com",
     "deepai.org"
 ]);
+const SHORTCUT_HELD_STALE_TIMEOUT_MS = 1000;
 let shortcutHeld = false;
 let heldShortcut = "";
+let shortcutHeldAt = 0;
 let shortcuts = normalizeShortcuts();
 
 function shortcutMatches(event, shortcut) {
@@ -81,6 +83,7 @@ function getReleaseToken(binding) {
 function triggerShortcut(event, command, binding) {
     shortcutHeld = true;
     heldShortcut = binding;
+    shortcutHeldAt = Date.now();
     event.preventDefault();
     event.stopPropagation();
     try {
@@ -99,6 +102,7 @@ function triggerShortcut(event, command, binding) {
     } catch (_) {
         shortcutHeld = false;
         heldShortcut = "";
+        shortcutHeldAt = 0;
     }
 }
 
@@ -106,6 +110,7 @@ function releaseShortcut() {
     const releaseToken = getReleaseToken(heldShortcut);
     shortcutHeld = false;
     heldShortcut = "";
+    shortcutHeldAt = 0;
     sendShortcutRelease(releaseToken);
 }
 
@@ -141,8 +146,15 @@ chrome.storage.local.get(SHORTCUTS_KEY)
     .catch(() => {});
 
 document.addEventListener("keydown", event => {
-    if (event.repeat || shortcutHeld) {
+    if (event.repeat) {
         return;
+    }
+
+    if (shortcutHeld) {                 //按两下bug
+        if (Date.now() - shortcutHeldAt < SHORTCUT_HELD_STALE_TIMEOUT_MS) {
+            return;
+        }
+        releaseShortcut();
     }
 
     const command = LLM_HOSTS.has(location.hostname)
@@ -195,6 +207,18 @@ window.addEventListener?.("focus", () => {
         releaseShortcut();
     }
 });
+
+window.addEventListener?.("blur", () => {        //手动回llm点两下问题
+    if (shortcutHeld) {
+        releaseShortcut();
+    }
+});
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && shortcutHeld) {
+        releaseShortcut();
+    }
+}, true);
 
 document.addEventListener("mouseup", event => {
     if (shortcutHeld && heldShortcut.startsWith("Mouse")) {

@@ -11,7 +11,7 @@ const LEARNCODEFAST_COURSE_URL_PATTERN =
 
 let pageUrl = location.href;
 let clickedButtons = new WeakSet();
-const COURSE_PAGE_SCAN_DELAYS_MS = [0, 100, 300, 1000];     //渲染延迟
+const COURSE_PAGE_SCAN_DELAYS_MS = [0, 100, 300, 1000];     //渲染延迟hack
 
 function isLearnCodeFastCoursePage(url = location.href) {
     return LEARNCODEFAST_COURSE_URL_PATTERN.test(url);
