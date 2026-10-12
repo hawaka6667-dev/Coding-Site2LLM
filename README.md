@@ -16,7 +16,7 @@
 
 I recommend https://chromewebstore.google.com/detail/bbmkfioclndokjpilbgnlnandfflpepi to ```ctrl a``` precisely
 
-**Leanling** — I'm working on it
+**Leanling** — I'm working on it🚧
 
 ## Features
 
