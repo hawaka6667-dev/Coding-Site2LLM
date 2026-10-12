@@ -2,6 +2,7 @@
 file: worker/exercism/dismiss_dialogs.js
 role: dismiss safe continuation actions in Exercism modal dialogs
 scope: all Exercism track pages
+处理广告弹窗
 */
 
 (() => {

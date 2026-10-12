@@ -2,7 +2,7 @@
 file: worker/diagnostics.js
 role: centralize workflow diagnostics without logging user content
 does_not_own: workflow control flow or persistence
-contract: correlate structured events without logging page or user content
+仅处理广告弹窗
 */
 
 (() => {

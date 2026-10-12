@@ -315,7 +315,29 @@ function handleExercismWorkflowMessage(
     }
 
     markCompleteAndRefreshConcepts(tabId, sender.tab.url, operationId)
-        .then(completed => sendResponse({ completed }))
+        .then(completed => {
+            sendResponse({ completed });
+            if (!completed) {
+                return;
+            }
+
+            void chrome.tabs.remove(tabId)
+                .then(() => diagnostics.log(
+                    "exercism-mark-complete",
+                    operationId,
+                    "tab.closed",
+                    { tabId }
+                ))
+                .catch(error => diagnostics.log(
+                    "exercism-mark-complete",
+                    operationId,
+                    "tab.close-failed",
+                    {
+                        tabId,
+                        errorName: error instanceof Error ? error.name : "UnknownError"
+                    }
+                ));
+        })
         .catch(error => {
             diagnostics.log("exercism-mark-complete", operationId, "workflow.failed", {
                 tabId,

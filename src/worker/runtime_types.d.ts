@@ -14,6 +14,7 @@ interface Element {
         setValue(value: string): void;
         getValue(): string;
         focus(): void;
+        getInputField?(): Element | null;
     };
 }
 

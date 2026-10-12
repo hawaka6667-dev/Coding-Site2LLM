@@ -22,7 +22,11 @@ namespace SmartReturn {
             return false;
         }
 
-        return /(?:[{};]|=>|\b(?:const|let|var|function|return|class|def|import|from|public|private|if|for|while)\b|<!--[\s\S]*-->|^\s*#include\b)/m.test(value);
+        const hasHaskellSyntax = /(?:^\s*[a-z_][\w']*(?:\s+[^=\n]+)+\s*=\s*\S|^\s*[a-z_][\w']*\s*::\s*[^=\n]+)/m.test(value);
+
+        return /^[+\-<>\[\].,\s]+$/.test(value) ||
+            hasHaskellSyntax ||
+            /(?:[{};]|=>|\b(?:const|let|var|function|return|class|def|import|from|public|private|if|for|while)\b|<!--[\s\S]*-->|^\s*#include\b)/m.test(value);
     }
 
     export async function replaceCode(tabId: number, text: string) {

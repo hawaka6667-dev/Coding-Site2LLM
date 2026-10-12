@@ -1,6 +1,7 @@
 /* @machine
 file: worker/adapters/codewars_adapter.ts
 role: own the codewars adapter site adapter
+？？？attemp？？？？没发挥作用？？？待处理
 */
 
 function parseCodewarsFeedback(text: string) {
@@ -43,18 +44,28 @@ const CodewarsAdapter: CodingSiteAdapter = {
 
     async testAndSubmit(tabId) {
         const submitted = await executePage(tabId, () => {
-            const attempt = document.querySelector("#attempt_btn");
+            const editor = document.querySelector("#code .js-editor .CodeMirror")?.CodeMirror;
+            const input = editor?.getInputField?.();
 
-            if (!attempt || attempt.offsetWidth === 0 || attempt.offsetHeight === 0) {
+            if (!input) {
                 return false;
             }
 
-            attempt.click();
+            input.focus();
+            for (const type of ["keydown", "keyup"]) {
+                input.dispatchEvent(new KeyboardEvent(type, {
+                    key: "Enter",
+                    code: "Enter",
+                    ctrlKey: true,
+                    bubbles: true,
+                    cancelable: true
+                }));
+            }
             return true;
         });
 
         if (submitted !== true) {
-            throw new Error("Could not find the Codewars Attempt button.");
+            throw new Error("Could not trigger Ctrl+Enter in the Codewars solution editor.");
         }
     },
 

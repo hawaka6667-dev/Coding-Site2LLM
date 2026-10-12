@@ -8,6 +8,22 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { loadCoreWorker } = require("../worker-test-harness.js");
 
+test("recognizes Brainfuck snippets as code without accepting plain explanations", () => {
+    const context = loadCoreWorker();
+
+    assert.equal(context.SmartReturn.isLikelyCode("+++++[>++++++++<-]>+.---."), true);
+    assert.equal(context.SmartReturn.isLikelyCode("++[>++<-]\n."), true);
+    assert.equal(context.SmartReturn.isLikelyCode("A short explanation of the loop."), false);
+});
+
+test("recognizes Haskell function equations and type signatures", () => {
+    const context = loadCoreWorker();
+
+    assert.equal(context.SmartReturn.isLikelyCode("doubleMe x = x + x"), true);
+    assert.equal(context.SmartReturn.isLikelyCode("doubleMe :: Int -> Int\ndoubleMe x = x * 2"), true);
+    assert.equal(context.SmartReturn.isLikelyCode("The answer equals 42."), false);
+});
+
 test("pending adapter submission does not block consecutive Smart Returns", async () => {
     const context = loadCoreWorker();
     const sourceTab = {
