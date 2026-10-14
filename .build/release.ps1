@@ -1,6 +1,10 @@
 <#
 Publish the already-committed manifest version as a GitHub release.
 #>
+param(
+    [switch]$SkipTests
+)
+
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -32,9 +36,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "GitHub CLI authentication failed."
 }
 
-& npm run test:release
-if ($LASTEXITCODE -ne 0) {
-    throw "Release tests failed."
+if ($SkipTests) {
+    Write-Warning "Release tests were skipped by explicit request."
+} else {
+    & npm run test:release
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release tests failed."
+    }
 }
 
 & (Join-Path $PSScriptRoot "package.ps1") -OutputDirectory $artifactDirectory
@@ -91,7 +99,11 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseUrl)) {
 Write-Host ""
 Write-Host "Release complete"
 Write-Host "Version: $tag"
-Write-Host "Tests: passed (npm run test:release)"
+if ($SkipTests) {
+    Write-Host "Tests: skipped by explicit request"
+} else {
+    Write-Host "Tests: passed (npm run test:release)"
+}
 Write-Host "Uploaded CRX: $crxPath"
 Write-Host "Generated ZIP (local only): $zipPath"
 Write-Host "Release URL: $releaseUrl"

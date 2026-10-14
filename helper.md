@@ -328,9 +328,10 @@ npm run test:contracts  # manifest、注入、Exercism wiring 和资源契约
 npm run dev:check       # Chrome、MCP、Service Worker、必要页面和文件入口
 npm run session:end     # 测试通过后 reload 扩展并刷新已有 coding/LLM 页面
 npm run release         # 已提交版本的一键测试、打包、推送、打 tag 和 GitHub Release 发布
+npm run release -- -SkipTests # 显式跳过发布测试，其余发布检查和步骤不变
 ```
 
-`npm run release` 仅从 `main` 发布已提交的 manifest version。它一次运行所有 release tests、生成 CRX/ZIP、推送 `main`、创建或复用同名 tag，并创建或更新 GitHub Release。成功后终端回执包含版本、测试状态、CRX 上传路径、ZIP 本地路径和 Release URL；失败时脚本会停止并报告错误。
+`npm run release` 仅从 `main` 发布已提交的 manifest version。默认运行所有 release tests；仅显式传入 `-SkipTests` 时跳过测试。两种模式都会生成 CRX/ZIP、推送 `main`、创建或复用同名 tag，并创建或更新 GitHub Release。成功后终端回执包含版本、测试状态、CRX 上传路径、ZIP 本地路径和 Release URL；失败时脚本会停止并报告错误。
 
 
 
