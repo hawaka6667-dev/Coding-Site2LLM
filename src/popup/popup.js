@@ -19,6 +19,7 @@ const sendButton = document.getElementById("send-context");
 const reloadExtensionButton = document.getElementById("reload-extension");
 const refreshAffectedPagesButton = document.getElementById("refresh-affected-pages");
 const status = document.getElementById("status");
+const extensionMeta = document.getElementById("extension-meta");
 const dailyPracticeList = document.getElementById("daily-practice-links");
 const dailyPracticeAddButton = document.getElementById("daily-practice-add");
 const dailyPracticeOpenAllButton = document.getElementById("daily-practice-open-all");
@@ -200,6 +201,11 @@ async function renderShortcut() {
     sendButton.textContent = `Send question to LLM (${value || "None"})`;
 }
 
+function renderExtensionMeta() {
+    const { name, version } = chrome.runtime.getManifest();
+    extensionMeta.textContent = `${name} v${version}`;
+}
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local" && changes[SHORTCUTS_KEY]) {
         renderShortcut().catch(() => {});
@@ -333,3 +339,4 @@ renderToggle();
 renderProvider();
 renderShortcut();
 loadCustomDailyPracticeProviders();
+renderExtensionMeta();

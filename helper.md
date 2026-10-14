@@ -30,7 +30,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 
 当前 target users 是学生和做题者。他们需要在题目、code editor 与 LLM 之间快速切换。supported coding sites、developer 使用的语言和当前 page language 都是 runtime environment，不能被当作 user persona 或 UI language preference。
 
-当前支持的 coding sites：Exercism、LeetCode、Codewars，以及其它 HTTP(S) pages 的 raw-source fallback。
+当前支持的 coding sites：Exercism、LeetCode、Codewars、Adam Math HHU，以及其它 HTTP(S) pages 的 raw-source fallback。
 
 内置 LLM providers：DeepSeek、ChatGPT、Claude、Gemini、DeepAI、Kimi。Options 可添加自定义 HTTP(S) provider，保存在 `customLlmProviders`；按名称选择后，worker 使用保存 URL 的 origin 查找或打开目标标签页。具体内置匹配规则以 `src/worker/configure_supported_coding_sites_and_llm_providers.ts` 为准。
 
@@ -50,6 +50,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | popup daily-practice entry | `src/popup/daily_practice_providers.js`, `src/popup/popup.js` | `npm run test:unit` |
 | SQLBolt Run Query shortcut | `src/worker/sqlbolt/run_query.js`, `src/manifest.json` | `npm run test:unit` 和 `npm run test:contracts` |
 | LearnCodeFast 课程页自动化 | `src/worker/learncodefast/course_page_automation.js`, `src/manifest.json` | `node --test tests/worker/learncodefast-mark-complete.test.js` 和 `npm run test:contracts` |
+| Computable Secrets lesson 自动检查、展开 worked solution 与左右键导航 | `src/worker/computable_secrets/lesson_navigation.js`, `src/manifest.json` | `node --test tests/worker/computable-secrets-lesson-navigation.test.js` 和 `npm run test:contracts` |
 | LLM provider options, popup selection and routing | `src/options/options.js`, `src/popup/popup.js`, `src/worker/configure_supported_coding_sites_and_llm_providers.ts`, `src/worker/workflows/run_coding_context_to_llm_workflow.ts` | `npm run test:unit`, `npm run test:routing`, `npm run test:contracts` |
 | extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
 | development environment and generated package | `tests/dev-check.ps1`, `package.json`, `src/manifest.json`, `dist/` | `npm run dev:check` |
@@ -177,6 +178,8 @@ LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当�
 | LeetCode | `/problems/:slug` 的 slug；忽略 query、hash 与同题子路由 | 通用 Smart Return 只回原 source tab；submission 到编辑器的专用选择策略另行实现 |
 | Exercism | track + exercise slug；overview 与 `/edit` 相同 | overview 与编辑页仍是不同页面能力，不能把 overview 当作代码编辑器 |
 | Codewars | kata slug + train language | 只能使用同一身份的训练页 |
+| Adam Math HHU | `adam.math.hhu.de` 的 world/level 页面 | 从运行时 DOM 提取教程说明、Lean 代码和当前 goal；编辑器外可用左右方向键切换关卡，编辑器获得焦点时不处理 |
+| Computable Secrets | `/learn/leanlings/intro?lesson=...` | 编辑器外可用左右方向键切换 lesson；`.lean-code-input` 编辑器获得焦点时不处理 |
 | 其它 HTTP(S) 来源 | 完整 URL | 不跨 URL 猜测题目身份 |
 
 Smart Return 只激活路由记录的 `sourceTabId`，不按平台、题目身份或标签页位置选择替代页。source tab 关闭或已不存在，则清除对应路由及复制 payload，不跳转；只有下一次显式 `send-context` 才建立新路由。来源 tab 换域名或课程页面不会清除 route，但当前页面是否支持代码回填和站点测试仍由对应 adapter 决定。
@@ -216,6 +219,8 @@ Smart Return 成功回填后启动的站点测试/提交属于 adapter 的独立
 | `worker/configure_supported_coding_sites_and_llm_providers.ts` | 定义内置 provider 元数据，并把有效自定义 provider URL 解析为 origin 匹配规则 | 用户设置 UI、prompt 捕获 |
 | `worker/llm_copy_tracker.js` | 在 HTTP(S) 页面转发显式复制文本，供已建立的 Smart Return route 使用 | provider 管理、route 存储 |
 | `worker/sqlbolt/run_query.js` | 仅在 SQLBolt lesson 的编辑器聚焦时，将 Ctrl+Enter 转发到同一编辑器容器的 `RUN QUERY` 链接 | SQLBolt 页面以外的快捷键、其它站点编辑器 |
+| `worker/adam_math_hhu/level_navigation.js` | 将 Adam Math HHU 关卡页的左右方向键映射到 Previous/Next level；事件目标或当前焦点位于可编辑控件/Monaco 时不拦截 | 代码编辑器输入与其它站点快捷键 |
+| `worker/computable_secrets/lesson_navigation.js` | 在 Computable Secrets Leanlings lesson 页面等待可用的 Check exercise 并对每个 lesson 自动点击一次；确保 Read a worked solution 展开；左右方向键映射到 Previous/Next，事件目标或当前焦点位于可编辑控件/Lean editor 时不拦截 | Lean 编辑器输入与其它站点快捷键 |
 | `worker/workflows/exercism_workflow.ts` | 协调 Exercism test-submit、受管 overview 窗口、Mark as complete 和 concepts 刷新 | 页面 selector 和 overview/edit 页面状态判断 |
 | `submitted_overview/open_submitted_overview_after_submit.js` | 仅在 edit 页捕获 Submit；同一次提交/redirect cycle 中重复 click 或 Turbo 事件只触发一次窗口创建请求；按设置打开不抢焦点 overview 并保留原标签页中的 editor | Chrome 窗口 API、overview 完成和普通 overview 路由 |
 | `open_exercise_in_editor.js` | 仅判断 overview 是否进入 `/edit` | `Mark as complete`、提交确认 |

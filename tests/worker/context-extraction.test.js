@@ -22,6 +22,65 @@ test("assembles title, description, feedback, and source", () => {
     assert.match(prompt, /def closest\(points\): pass/);
 });
 
+test("extracts Adam Math HHU lesson, Lean source, and current goal", async () => {
+    const context = loadCoreWorker();
+    const visibleElement = (text, extra = {}) => ({
+        innerText: text,
+        textContent: text,
+        offsetWidth: 100,
+        offsetHeight: 20,
+        querySelectorAll: () => [],
+        ...extra
+    });
+    const sourceLines = [
+        visibleElement("example (x q : ℕ) : 37 * x + q = 37 * x + q := by"),
+        visibleElement("    rfl")
+    ];
+    const editor = visibleElement("", {
+        querySelectorAll: selector => selector === ".view-lines .view-line"
+            ? sourceLines
+            : []
+    });
+    const instructions = [
+        visibleElement("Read this first"),
+        visibleElement("Use the rfl tactic to prove the goal.")
+    ];
+    const exercise = visibleElement(
+        "If x and q are arbitrary natural numbers, then 37x+q=37x+q.\n\nexample (x q : ℕ) : 37 * x + q = 37 * x + q := by"
+    );
+    const goal = visibleElement("unsolved goals\n\nx q : ℕ\n⊢ 37 * x + q = 37 * x + q");
+
+    context.document = {
+        title: "Natural Number Game",
+        querySelector(selector) {
+            if (selector === ".app-bar-title") {
+                return visibleElement("Level 1 / 8 : The rfl tactic");
+            }
+            if (selector === ".exercise-statement") return exercise;
+            return null;
+        },
+        querySelectorAll(selector) {
+            if (selector === ".message.information .markdown") return instructions;
+            if (selector === ".codeview .monaco-editor") return [editor];
+            if (selector === ".font-code.pre-wrap") return [goal];
+            return [];
+        }
+    };
+    context.location = { href: "https://adam.math.hhu.de/#/g/leanprover-community/nng4/world/Tutorial/level/1" };
+    context.executePage = async (_tabId, pageFunction) => pageFunction();
+
+    const result = await vm.runInContext("AdamMathHHUAdapter.getContext(1)", context);
+
+    assert.equal(result.platform, "Adam Math HHU");
+    assert.equal(result.title, "Level 1 / 8 : The rfl tactic");
+    assert.equal(result.language, "Lean");
+    assert.match(result.description, /Use the rfl tactic/);
+    assert.match(result.description, /If x and q are arbitrary natural numbers/);
+    assert.match(result.source, /:= by\n    rfl/);
+    assert.match(result.feedback, /unsolved goals/);
+    assert.match(result.feedback, /37 \* x \+ q = 37 \* x \+ q/);
+});
+
 test("extracts LeetCode source from the focused Monaco editor", async () => {
     const context = loadCoreWorker();
     const source = "bool canPlaceFlowers(int* flowerbed, int flowerbedSize, int n) { }";

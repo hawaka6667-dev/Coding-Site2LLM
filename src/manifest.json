@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Coding Site2LLM",
-  "version": "0.5.7.18",
+  "version": "0.5.8.0",
   "description": "Capture coding-site context and send it to an LLM.",
   "icons": {
     "128": "icons/icon128.png"
@@ -94,6 +94,24 @@
       ],
       "js": [
         "worker/learncodefast/course_page_automation.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://adam.math.hhu.de/*"
+      ],
+      "js": [
+        "worker/adam_math_hhu/level_navigation.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://computablesecrets.com/learn/leanlings/*"
+      ],
+      "js": [
+        "worker/computable_secrets/lesson_navigation.js"
       ],
       "run_at": "document_start"
     },

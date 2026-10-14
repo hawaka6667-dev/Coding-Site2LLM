@@ -9,6 +9,7 @@ const PLATFORMS: CodingSiteAdapter[] = [
     ExercismOverviewAdapter,
     LeetCodeAdapter,
     CodewarsAdapter,
+    AdamMathHHUAdapter,
     SourceFallbackAdapter
 ];
 

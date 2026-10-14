@@ -108,6 +108,31 @@ test("injects the SQLBolt Run Query shortcut only on lesson pages", () => {
     assert.equal(sqlboltScripts[0].run_at, "document_start");
 });
 
+test("injects Adam Math HHU level navigation only on its host", () => {
+    const manifest = readManifest();
+    const navigationScripts = manifest.content_scripts.filter(script =>
+        script.js.includes("worker/adam_math_hhu/level_navigation.js")
+    );
+
+    assert.equal(navigationScripts.length, 1);
+    assert.deepEqual(navigationScripts[0].matches, ["https://adam.math.hhu.de/*"]);
+    assert.equal(navigationScripts[0].run_at, "document_start");
+});
+
+test("injects Computable Secrets lesson navigation only on its lesson page", () => {
+    const manifest = readManifest();
+    const navigationScripts = manifest.content_scripts.filter(script =>
+        script.js.includes("worker/computable_secrets/lesson_navigation.js")
+    );
+
+    assert.equal(navigationScripts.length, 1);
+    assert.deepEqual(
+        navigationScripts[0].matches,
+        ["https://computablesecrets.com/learn/leanlings/*"]
+    );
+    assert.equal(navigationScripts[0].run_at, "document_start");
+});
+
 test("keeps local resources referenced by extension HTML in the package", () => {
     const htmlFiles = listFiles(ROOT_DIR).filter(file => file.endsWith(".html"));
 

@@ -11,6 +11,7 @@ importScripts(
     "worker/adapters/exercism_edit_adapter.js",
     "worker/adapters/leetcode_adapter.js",
     "worker/adapters/codewars_adapter.js",
+    "worker/adapters/adam_math_hhu_adapter.js",
     "worker/adapters/source_fallback_adapter.js",
     "worker/adapters/exercism_overview_adapter.js",
     "worker/route_coding_page_and_build_llm_prompt.js",

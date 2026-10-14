@@ -12,7 +12,7 @@ const { loadRoutingWorker } = require("../worker-test-harness.js");
 test("routes supported exercise pages to their adapters", () => {
     const context = loadRoutingWorker();
     const result = vm.runInContext(
-        "({ exercism: getPlatform('https://exercism.org/tracks/c/exercises/hello-world/edit').name, overview: getPlatform('https://exercism.org/tracks/c/exercises/hello-world').name, leetcode: getPlatform('https://leetcode.com/problems/two-sum/').name, leetcodeSubmissions: getPlatform('https://leetcode.com/problems/dota2-senate/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75').name, codewars: getPlatform('https://www.codewars.com/kata/55c45be3b2079ecccb00010b/train/javascript').name })",
+        "({ exercism: getPlatform('https://exercism.org/tracks/c/exercises/hello-world/edit').name, overview: getPlatform('https://exercism.org/tracks/c/exercises/hello-world').name, leetcode: getPlatform('https://leetcode.com/problems/two-sum/').name, leetcodeSubmissions: getPlatform('https://leetcode.com/problems/dota2-senate/submissions/2154894608/?envType=study-plan-v2&envId=leetcode-75').name, codewars: getPlatform('https://www.codewars.com/kata/55c45be3b2079ecccb00010b/train/javascript').name, adamMathHHU: getPlatform('https://adam.math.hhu.de/#/g/leanprover-community/nng4/world/Tutorial/level/1').name })",
         context
     );
 
@@ -21,8 +21,18 @@ test("routes supported exercise pages to their adapters", () => {
         overview: "Exercism overview",
         leetcode: "LeetCode",
         leetcodeSubmissions: "LeetCode",
-        codewars: "Codewars"
+        codewars: "Codewars",
+        adamMathHHU: "Adam Math HHU"
     }));
+});
+
+test("keeps unrelated pages on the raw-source fallback", () => {
+    const context = loadRoutingWorker();
+
+    assert.equal(
+        vm.runInContext("getPlatform('https://adam.math.hhu.de/').name", context),
+        "Web source"
+    );
 });
 
 test("writes returned code through Exercism's CodeMirror input path", async () => {

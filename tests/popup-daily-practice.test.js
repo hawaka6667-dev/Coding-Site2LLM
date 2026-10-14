@@ -77,7 +77,10 @@ async function loadPopup(initialStorage = {}) {
             },
             runtime: {
                 async sendMessage() { return { ok: true }; },
-                reload() { reloads += 1; }
+                reload() { reloads += 1; },
+                getManifest() {
+                    return { name: "Coding Site2LLM", version: "0.5.7.18" };
+                }
             }
         },
         setTimeout: () => 1,
@@ -101,6 +104,12 @@ test("reloads the extension from the popup control", async () => {
     await popup.elements.get("reload-extension").dispatch("click");
 
     assert.equal(popup.reloads, 1);
+});
+
+test("shows the extension name and manifest version in the popup", async () => {
+    const { elements } = await loadPopup();
+
+    assert.equal(elements.get("extension-meta").textContent, "Coding Site2LLM v0.5.7.18");
 });
 
 test("adds a custom URL with a detected label, then removes it", async () => {
