@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^npm run typecheck:extension 2>&1 \\| Select-Object -Last 15; npm run test:smart-return 2>&1 \\| Select-Object -Last 25; node --test tests/source-header-contract\\.test\\.js tests/global-extension-contract\\.test\\.js tests/popup-daily-practice\\.test\\.js 2>&1 \\| Select-String \"\\^# \\(pass\\|fail\\)\\|not ok\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

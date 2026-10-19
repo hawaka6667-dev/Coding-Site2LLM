@@ -43,7 +43,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | Exercism overview redirect, auto-completion and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/submitted_overview/`, `src/worker/workflows/exercism_workflow.ts` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `src/worker/exercism/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/workflows/smart_return/smart_return_workflow.ts`, `src/worker/workflows/exercism_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/submitted_overview/open_submitted_overview_after_submit.js` | `npm run test:unit` 和 `npm run test:routing` |
-| Smart Return route lifecycle and code write-back | `src/worker/workflows/smart_return/`, `src/worker/adapters/` | `npm run test:unit` |
+| Smart Return route lifecycle and code write-back | `src/worker/workflows/smart_return/`, `src/worker/adapters/` | `npm run test:smart-return` |
 | Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/workflows/smart_return/smart_return_workflow.ts` | `npm run test:unit` |
 | Exercism modal dismissal | `src/worker/exercism/dismiss_dialogs.js`, `tests/exercism/edit/continue-dialogs.test.js`, `tests/exercism/track/donation-modal.test.js` | `npm run test:unit` 和 `npm run test:contracts` |
 | core workflow operation logs and debug-module refactor | `src/worker/debug/` (planned), `src/worker/diagnostics.js`, `src/worker/workflows/`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:unit` 和 `npm run test:routing` |
@@ -178,7 +178,7 @@ LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当�
 | LeetCode | `/problems/:slug` 的 slug；忽略 query、hash 与同题子路由 | 通用 Smart Return 只回原 source tab；submission 到编辑器的专用选择策略另行实现 |
 | Exercism | track + exercise slug；overview 与 `/edit` 相同 | overview 与编辑页仍是不同页面能力，不能把 overview 当作代码编辑器 |
 | Codewars | kata slug + train language | 只能使用同一身份的训练页 |
-| Adam Math HHU | `adam.math.hhu.de` 的 world/level 页面 | 从运行时 DOM 提取教程说明、Lean 代码和当前 goal；编辑器外可用左右方向键切换关卡，编辑器获得焦点时不处理 |
+| Adam Math HHU | `adam.math.hhu.de` 的 world/level 页面 | 从运行时 DOM 提取教程说明、Lean 代码和当前 goal；Smart Return 通过可见 `.codeview .monaco-editor` 的 `textarea.inputarea` 执行 Ctrl+A 后粘贴，整段替换并保留 Lean 换行/缩进；不得直接赋值隐藏 textarea 并派发 `input`；编辑器外可用左右方向键切换关卡，编辑器获得焦点时不处理 |
 | Computable Secrets | `/learn/leanlings/intro?lesson=...` | 编辑器外可用左右方向键切换 lesson；`.lean-code-input` 编辑器获得焦点时不处理 |
 | 其它 HTTP(S) 来源 | 完整 URL | 不跨 URL 猜测题目身份 |
 
@@ -328,7 +328,7 @@ npm run test:contracts  # manifest、注入、Exercism wiring 和资源契约
 npm run dev:check       # Chrome、MCP、Service Worker、必要页面和文件入口
 npm run session:end     # 测试通过后 reload 扩展并刷新已有 coding/LLM 页面
 npm run release         # 已提交版本的一键测试、打包、推送、打 tag 和 GitHub Release 发布
-npm run release -- -SkipTests # 显式跳过发布测试，其余发布检查和步骤不变
+npm run release -- -SkipTests # 默认显式跳过发布测试，其余发布检查和步骤不变
 ```
 
 `npm run release` 仅从 `main` 发布已提交的 manifest version。默认运行所有 release tests；仅显式传入 `-SkipTests` 时跳过测试。两种模式都会生成 CRX/ZIP、推送 `main`、创建或复用同名 tag，并创建或更新 GitHub Release。成功后终端回执包含版本、测试状态、CRX 上传路径、ZIP 本地路径和 Release URL；失败时脚本会停止并报告错误。

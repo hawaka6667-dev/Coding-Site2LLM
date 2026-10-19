@@ -180,6 +180,7 @@ test("loads Smart Return modules before the runtime coordinator", () => {
         "worker/workflows/smart_return/route_lifecycle.js",
         "worker/workflows/smart_return/code_transfer.js",
         "worker/workflows/smart_return/smart_return_workflow.js",
+        "worker/workflows/smart_return/target_control.js",
         "worker/workflows/exercism_workflow.js",
         "worker/workflows/run_coding_context_to_llm_workflow.js"
     ].map(file => background.indexOf(`"${file}"`));

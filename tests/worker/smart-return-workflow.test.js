@@ -24,6 +24,87 @@ test("recognizes Haskell function equations and type signatures", () => {
     assert.equal(context.SmartReturn.isLikelyCode("The answer equals 42."), false);
 });
 
+test("recognizes Lean proofs only for Adam Math HHU", () => {
+    const context = loadCoreWorker();
+    const proof = "by\n  rw [add_zero]\n  rfl";
+
+    assert.equal(context.SmartReturn.isLikelyCode(proof, "Adam Math HHU"), true);
+    assert.equal(context.SmartReturn.isLikelyCode(proof), false);
+    assert.equal(
+        context.SmartReturn.isLikelyCode("I would solve this by induction on n.", "Adam Math HHU"),
+        false
+    );
+});
+
+test("accepts Monaco-handled paste when its hidden input area is cleared", async () => {
+    const context = loadCoreWorker();
+    const sourceTab = {
+        id: 11,
+        url: "https://adam.math.hhu.de/#/g/leanprover-community/nng4/world/Addition/level/3"
+    };
+    const expected = "theorem add_comm (a b : ℕ) : a + b = b + a := by\n  induction b with d hd\n  rw [zero_add]\n  rw [add_zero]";
+    let editorValue = "theorem old_theorem : True := by\n  trivial";
+    let allSelected = false;
+    const events = [];
+
+    class MockDataTransfer {
+        values = new Map();
+        setData(type, value) { this.values.set(type, value); }
+        getData(type) { return this.values.get(type) || ""; }
+    }
+    class MockKeyboardEvent {
+        constructor(type, options) { Object.assign(this, options, { type }); }
+    }
+    class MockClipboardEvent {
+        constructor(type, options) {
+            Object.assign(this, options, { type, defaultPrevented: false });
+        }
+        preventDefault() { this.defaultPrevented = true; }
+    }
+
+    const input = {
+        value: editorValue,
+        focus() {},
+        dispatchEvent(event) {
+            events.push(event.type);
+            if (event.type === "keydown" && event.ctrlKey && event.key === "a") {
+                allSelected = true;
+            }
+            if (event.type === "paste" && allSelected) {
+                editorValue = event.clipboardData.getData("text/plain");
+                this.value = "";
+                event.preventDefault();
+            }
+        }
+    };
+    const editor = {
+        offsetWidth: 600,
+        offsetHeight: 192,
+        querySelector(selector) {
+            assert.equal(selector, "textarea.inputarea");
+            return input;
+        }
+    };
+
+    context.chrome.tabs.get = async tabId => tabId === sourceTab.id ? sourceTab : null;
+    context.document = {
+        querySelectorAll(selector) {
+            assert.equal(selector, ".codeview .monaco-editor");
+            return [editor];
+        }
+    };
+    context.DataTransfer = MockDataTransfer;
+    context.KeyboardEvent = MockKeyboardEvent;
+    context.ClipboardEvent = MockClipboardEvent;
+    context.executePage = async (_tabId, callback, args = []) => callback(...args);
+
+    await context.SmartReturn.replaceCode(sourceTab.id, expected);
+
+    assert.equal(editorValue, expected);
+    assert.equal(input.value, "");
+    assert.deepEqual(events, ["keydown", "keyup", "paste"]);
+});
+
 test("pending adapter submission does not block consecutive Smart Returns", async () => {
     const context = loadCoreWorker();
     const sourceTab = {
@@ -127,5 +208,27 @@ test("keeps the route when the source tab navigates to another domain", async ()
     await context.SmartReturn.run(llmTab, "return:cross-domain");
     assert.ok(await context.SmartReturn.routes.get(7, 22));
     assert.equal((await context.SmartReturn.routes.get(7, 22)).sourceTabId, 11);
+});
+
+test("shows and manually changes the Smart Return target", async () => {
+    const context = loadCoreWorker();
+    const tabA = { id: 11, windowId: 7, title: "A", url: "https://course.example/a" };
+    const tabB = { id: 12, windowId: 7, title: "B", url: "https://course.example/b" };
+    const llmTab = { id: 22, windowId: 7, title: "chat", url: "https://chat.deepseek.com/a/chat/s/test" };
+    context.tabState.push(tabA, tabB, llmTab);
+    context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
+
+    let state = await context.SmartReturn.getTargetState(7, 22);
+    assert.equal(state.llmTabId, 22);
+    assert.equal(state.target, null);
+    assert.deepEqual(state.candidates.map(tab => tab.tabId), [11, 12]);
+
+    await context.SmartReturn.setTarget(22, 11);
+    state = await context.SmartReturn.getTargetState(7, 11);
+    assert.equal(state.llmTabId, 22);
+    assert.equal(state.target.tabId, 11);
+
+    await context.SmartReturn.setTarget(22, 12);
+    assert.equal((await context.SmartReturn.routes.get(7, 22)).sourceTabId, 12);
 });
 

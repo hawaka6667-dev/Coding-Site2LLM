@@ -17,6 +17,50 @@ const AdamMathHHUAdapter: CodingSiteAdapter = {
         }
     },
 
+    async replaceCode(tabId, text) {
+        const replaced = await executePage(tabId, async value => {
+            const editor = [...document.querySelectorAll(
+                ".codeview .monaco-editor"
+            )].find(candidate =>
+                candidate.offsetWidth > 0 && candidate.offsetHeight > 0
+            );
+            const input = editor?.querySelector("textarea.inputarea");
+
+            if (!editor || !input) {
+                return false;
+            }
+
+            const normalizedValue = String(value).replace(/\r\n?/g, "\n");
+            input.focus();
+            for (const type of ["keydown", "keyup"]) {
+                input.dispatchEvent(new KeyboardEvent(type, {
+                    key: "a",
+                    code: "KeyA",
+                    keyCode: 65,
+                    which: 65,
+                    ctrlKey: true,
+                    bubbles: true,
+                    cancelable: true
+                }));
+            }
+
+            const clipboardData = new DataTransfer();
+            clipboardData.setData("text/plain", normalizedValue);
+            const pasteEvent = new ClipboardEvent("paste", {
+                bubbles: true,
+                cancelable: true,
+                clipboardData
+            });
+            input.dispatchEvent(pasteEvent);
+
+            return pasteEvent.defaultPrevented;
+        }, [text]);
+
+        if (replaced !== true) {
+            throw new Error("Could not replace code in the Adam Math HHU Lean editor.");
+        }
+    },
+
     async getContext(tabId) {
         const value = await executePage(tabId, () => {
             const normalize = (text: string) => String(text || "")

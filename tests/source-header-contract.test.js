@@ -12,6 +12,7 @@ test("documents core workers with a machine header", () => {
         "worker/workflows/smart_return/route_lifecycle.ts",
         "worker/workflows/smart_return/code_transfer.ts",
         "worker/workflows/smart_return/smart_return_workflow.ts",
+        "worker/workflows/smart_return/target_control.ts",
         "worker/workflows/exercism_workflow.ts",
         "worker/workflows/run_coding_context_to_llm_workflow.ts"
     ];

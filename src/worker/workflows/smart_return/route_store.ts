@@ -43,6 +43,11 @@ namespace SmartReturn {
             return routes[this.getKey(windowId, llmTabId)] || null;
         }
 
+        async listForWindow(windowId: number) {
+            const routes = await this.loadAll();
+            return Object.values(routes).filter(route => route.windowId === windowId);
+        }
+
         updateIfCurrent(
             expectedRoute: Route,
             updates: Partial<Route>

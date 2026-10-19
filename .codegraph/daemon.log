@@ -23,3 +23,21 @@
 [2m2026-10-05T12:27:58.4448067+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mf:\@llm made\Coding Site2LLM [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
 [2m2026-10-05T12:32:58.5295424+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300086 [3midle_timeout_ms[0m[2m=[0m300000
 [2m2026-10-05T12:32:58.5455018+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Coding Site2LLM
+[2m2026-10-15T21:33:05.5177979+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mf:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-15T21:38:05.6813006+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300210 [3midle_timeout_ms[0m[2m=[0m300000
+[2m2026-10-15T21:38:05.6987379+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Algo Run
+[2m2026-10-15T23:08:26.1531457+08:00[0m [32m INFO[0m [2mcodegraph[0m[2m:[0m folded a dead daemon's leftover write-ahead log back into the index [3mproject[0m[2m=[0mF:\@llm made\Algo Run
+[2m2026-10-15T23:08:26.188194+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mF:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-15T23:11:21.8755267+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mf:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-15T23:16:22.1553512+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300333 [3midle_timeout_ms[0m[2m=[0m300000
+[2m2026-10-15T23:16:22.6712799+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Algo Run
+[2m2026-10-15T23:16:58.3149192+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mf:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-15T23:19:43.4068324+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m watcher sync #1: 0 file(s) reindexed, 0 removed — .feedback/deprecated/browser-smoke.test.js, .gitignore [3msync[0m[2m=[0m1 [3mfiles_reindexed[0m[2m=[0m0 [3mfiles_removed[0m[2m=[0m0
+[2m2026-10-15T23:21:57.8790423+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300112 [3midle_timeout_ms[0m[2m=[0m300000
+[2m2026-10-15T23:21:58.0957681+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Algo Run
+[2m2026-10-15T23:22:15.5518768+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mF:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-16T19:11:50.7281668+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mF:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-16T19:11:57.3655914+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mF:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-19T17:56:38.6870223+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon started [3mproject[0m[2m=[0mf:\@llm made\Algo Run [3msocket[0m[2m=[0mcodegraph-v2-a625225897009084
+[2m2026-10-19T18:01:38.9375432+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon idle-exit: no clients [3midle_ms[0m[2m=[0m300259 [3midle_timeout_ms[0m[2m=[0m300000
+[2m2026-10-19T18:01:38.9555135+08:00[0m [32m INFO[0m [2mcodegraph_daemon[0m[2m:[0m daemon stopped [3mproject[0m[2m=[0mf:\@llm made\Algo Run

@@ -68,7 +68,7 @@ namespace SmartReturn {
             const copiedText = routedRoute.copiedText || clipboardText;
             const paste = routedRoute.copied
                 ? copiedText
-                : isLikelyCode(clipboardText)
+                : isLikelyCode(clipboardText, route.sourcePlatform)
                     ? clipboardText
                     : "";
 

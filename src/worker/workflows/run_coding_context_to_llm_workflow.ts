@@ -275,6 +275,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
+    const targetMessageResult = SmartReturn.handleTargetMessage(message, sendResponse);
+    if (targetMessageResult !== null) {
+        return targetMessageResult;
+    }
+
     const exercismMessageResult = handleExercismWorkflowMessage(
         message,
         sender,

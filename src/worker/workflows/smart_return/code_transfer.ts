@@ -2,6 +2,7 @@
 file: worker/workflows/smart_return/code_transfer.js
 role: read LLM clipboard content and write/submit code on coding tabs
 contract: use the site adapter when it owns editor replacement or submission
+好蠢的isLikelyCode手动维护方式
 */
 
 namespace SmartReturn {
@@ -15,7 +16,7 @@ namespace SmartReturn {
         });
     }
 
-    export function isLikelyCode(text: string) {
+    export function isLikelyCode(text: string, platform = "") {
         const value = String(text || "").trim();
 
         if (!value || value.length < 3 || value.length > 100000) {
@@ -23,9 +24,12 @@ namespace SmartReturn {
         }
 
         const hasHaskellSyntax = /(?:^\s*[a-z_][\w']*(?:\s+[^=\n]+)+\s*=\s*\S|^\s*[a-z_][\w']*\s*::\s*[^=\n]+)/m.test(value);
+        const hasLeanSyntax = platform === "Adam Math HHU" &&
+            /(?:^|\n)\s*(?:theorem|lemma|def|example|abbrev|structure|inductive|by|exact|apply|assumption|rfl|simp(?:_all)?|rw|rewrite|intro|intros|cases|induction|constructor|left|right|have|show|change|calc|refine|funext|ext|aesop|omega|ring|norm_num|decide|trivial|contradiction)\b/m.test(value);
 
         return /^[+\-<>\[\].,\s]+$/.test(value) ||
             hasHaskellSyntax ||
+            hasLeanSyntax ||
             /(?:[{};]|=>|\b(?:const|let|var|function|return|class|def|import|from|public|private|if|for|while)\b|<!--[\s\S]*-->|^\s*#include\b)/m.test(value);
     }
 

@@ -288,6 +288,61 @@
             cursor: pointer;
         }
 
+        .smart-return-target-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        .smart-return-target-title {
+            flex: none;
+            font-weight: 650;
+        }
+
+        .smart-return-target-current {
+            min-width: 0;
+            color: var(--muted);
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .smart-return-target select {
+            width: 100%;
+            padding: 4px 6px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 12px;
+        }
+
+        .smart-return-target option {
+            background: #ffffff;
+            color: #1b1d21;
+        }
+
+        .smart-return-target-hint {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .smart-return-target-hint:empty {
+            display: none;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .smart-return-target option {
+                background: #1b1d21;
+                color: #eceef1;
+            }
+        }
+
         @media (prefers-color-scheme: dark) {
             .provider option {
                 background: #1b1d21;
@@ -306,6 +361,17 @@
         <button id="reload-extension" type="button" title="Reload extension">Reload</button>
         <button id="refresh-affected-pages" type="button" title="Refresh affected pages">Refresh</button>
     </div>
+
+    <hr>
+
+    <section id="smart-return-target" class="smart-return-target" aria-label="Smart Return target">
+        <div class="smart-return-target-row">
+            <span class="smart-return-target-title">Return target</span>
+            <span id="smart-return-target-current" class="smart-return-target-current">None</span>
+        </div>
+        <select id="smart-return-target-select" aria-label="Change Smart Return target"></select>
+        <p id="smart-return-target-hint" class="smart-return-target-hint"></p>
+    </section>
 
     <hr>
 
@@ -336,6 +402,7 @@
     <p id="extension-meta" class="extension-meta"></p>
 
     <script src="daily_practice_providers.js"></script>
+    <script src="smart_return_target.js"></script>
     <script src="popup.js"></script>
 </body>
 
