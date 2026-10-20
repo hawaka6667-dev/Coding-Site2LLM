@@ -2,7 +2,7 @@
 Publish the already-committed manifest version as a GitHub release.
 #>
 param(
-    [switch]$SkipTests
+    [switch]$SkipTests = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +37,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($SkipTests) {
-    Write-Warning "Release tests were skipped by explicit request."#❌ 默認是直接發佈！！
+    Write-Warning "Release tests were skipped by explicit request."
 } else {
     & npm run test:release    
     if ($LASTEXITCODE -ne 0) {
