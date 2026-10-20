@@ -10,17 +10,30 @@ namespace SmartReturn {
             return;
         }
 
-        const tabs = await chrome.tabs.query({});
+        const [tabs, providers] = await Promise.all([
+            chrome.tabs.query({}),
+            getConfiguredLlmProviders()
+        ]);
         const llmTab = tabs.find(tab =>
-            tab.id === tabId && LLM_PROVIDERS.some(provider => provider.match(tab.url || ""))
+            tab.id === tabId && providers.some(provider => provider.match(tab.url || ""))
         );
-        const route = llmTab ? await routes.get(llmTab.windowId, tabId) : null;
+        let route = llmTab ? await routes.get(llmTab.windowId, tabId) : null;
 
         if (route) {
             await routes.updateIfCurrent(route, {
                 copied: true,
                 copiedText: text
             });
+        } else if (llmTab) {
+            const sharedRoute = await routes.getLatestForWindow(llmTab.windowId);
+            if (sharedRoute) {
+                await routes.save({
+                    ...sharedRoute,
+                    llmTabId: tabId,
+                    copied: true,
+                    copiedText: text
+                });
+            }
         }
     }
 

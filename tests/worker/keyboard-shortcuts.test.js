@@ -93,6 +93,49 @@ test("dispatches Smart Return synchronously on the first shortcut press", () => 
     assert.equal(messages[0].command, "smart-return");
 });
 
+test("recognizes every built-in and configured provider for Smart Return", async () => {
+    for (const hostname of [
+        "chat.deepseek.com",
+        "chatgpt.com",
+        "claude.ai",
+        "gemini.google.com",
+        "www.deepai.org",
+        "www.kimi.com"
+    ]) {
+        const { listeners, messages } = loadKeyboardShortcuts(hostname);
+        await Promise.resolve();
+        listeners.find(listener => listener.type === "keydown").listener({
+            key: "q",
+            code: "KeyQ",
+            ctrlKey: false,
+            altKey: true,
+            shiftKey: false,
+            metaKey: false,
+            repeat: false,
+            preventDefault() {},
+            stopPropagation() {}
+        });
+        assert.equal(messages[0]?.command, "smart-return", hostname);
+    }
+
+    const custom = loadKeyboardShortcuts("llm.example", {}, "", [
+        { name: "Custom LLM", url: "https://llm.example/chat" }
+    ]);
+    await Promise.resolve();
+    custom.listeners.find(listener => listener.type === "keydown").listener({
+        key: "q",
+        code: "KeyQ",
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        repeat: false,
+        preventDefault() {},
+        stopPropagation() {}
+    });
+    assert.equal(custom.messages[0]?.command, "smart-return");
+});
+
 test("blocks held-key repeats and allows another shortcut after keyup", () => {
     const { listeners, messages } = loadKeyboardShortcuts();
     const keydown = listeners.find(listener => listener.type === "keydown").listener;

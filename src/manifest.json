@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Coding Site2LLM",
-  "version": "0.5.8.3",
+  "version": "0.5.8.4",
   "description": "Capture coding-site context and send it to an LLM.",
   "icons": {
     "128": "icons/icon128.png"
@@ -74,6 +74,7 @@
         "*://*/*"
       ],
       "js": [
+        "worker/llm_provider_config.js",
         "worker/keyboard_shortcuts.js"
       ],
       "run_at": "document_start"

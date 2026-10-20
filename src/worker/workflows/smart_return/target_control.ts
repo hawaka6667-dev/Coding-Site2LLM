@@ -17,9 +17,6 @@ namespace SmartReturn {
         candidates: TargetTab[];
     }
 
-    const isLlmTab = (tab: chrome.tabs.Tab) =>
-        LLM_PROVIDERS.some(provider => provider.match(tab.url || ""));
-
     const toTargetTab = (tab: chrome.tabs.Tab): TargetTab => ({
         tabId: tab.id as number,
         title: tab.title || "",
@@ -27,11 +24,10 @@ namespace SmartReturn {
     });
 
     function resolveLlmTab(
-        tabs: chrome.tabs.Tab[],
+        llmTabs: chrome.tabs.Tab[],
         routeList: Route[],
         activeTabId: number | undefined
     ) {
-        const llmTabs = tabs.filter(isLlmTab);
         const active = llmTabs.find(tab => tab.id === activeTabId);
         if (active) {
             return active;
@@ -46,16 +42,31 @@ namespace SmartReturn {
         return llmTabs.length === 1 ? llmTabs[0] : null;
     }
 
+    async function getLlmTabs(windowId: number) {
+        const [tabs, providers] = await Promise.all([
+            chrome.tabs.query({ windowId }),
+            getConfiguredLlmProviders()
+        ]);
+        return tabs.filter(tab =>
+            providers.some(provider => provider.match(tab.url || ""))
+        );
+    }
+
     export async function getTargetState(
         windowId: number,
         activeTabId?: number
     ): Promise<TargetState> {
-        const tabs = await chrome.tabs.query({ windowId });
-        const routeList = await routes.listForWindow(windowId);
-        const llmTab = resolveLlmTab(tabs, routeList, activeTabId);
+        const [tabs, llmTabs, routeList] = await Promise.all([
+            chrome.tabs.query({ windowId }),
+            getLlmTabs(windowId),
+            routes.listForWindow(windowId)
+        ]);
+        const llmTab = resolveLlmTab(llmTabs, routeList, activeTabId);
         const llmTabId = typeof llmTab?.id === "number" ? llmTab.id : null;
-        const route = routeList.find(item => item.llmTabId === llmTabId);
+        const route = routeList.find(item => item.llmTabId === llmTabId) ||
+            await routes.getLatestForWindow(windowId);
         const targetTab = tabs.find(tab => tab.id === route?.sourceTabId);
+        const llmTabIds = new Set(llmTabs.map(tab => tab.id));
 
         return {
             llmTabId,
@@ -65,7 +76,7 @@ namespace SmartReturn {
                     typeof tab.id === "number" &&
                     tab.id !== llmTabId &&
                     /^https?:\/\//i.test(tab.url || "") &&
-                    !isLlmTab(tab)
+                    !llmTabIds.has(tab.id)
                 )
                 .map(toTargetTab)
         };
@@ -91,22 +102,28 @@ namespace SmartReturn {
             sourceUrl: url,
             sourcePlatform: platformName,
             sourceIdentity: getCodingPageIdentity(url, platformName),
-            status: "routed"
+            status: "routed",
+            copied: false,
+            copiedText: ""
         };
-        const route = await routes.get(llmTab.windowId, llmTabId);
-        const saved = route
-            ? await routes.updateIfCurrent(route, source)
-            : await routes.save({
-                windowId: llmTab.windowId,
-                llmTabId,
-                copied: false,
-                copiedText: "",
-                ...source
-            });
-
-        if (!saved) {
-            throw new Error("The route changed while updating; try again.");
+        const llmTabs = await getLlmTabs(llmTab.windowId);
+        if (!llmTabs.some(tab => tab.id === llmTabId)) {
+            llmTabs.push(llmTab);
         }
+
+        await Promise.all(llmTabs.map(async providerTab => {
+            const route = await routes.get(llmTab.windowId, providerTab.id as number);
+            const saved = route
+                ? await routes.updateIfCurrent(route, source)
+                : await routes.save({
+                    windowId: llmTab.windowId,
+                    llmTabId: providerTab.id as number,
+                    ...source
+                });
+            if (!saved) {
+                throw new Error("The route changed while updating; try again.");
+            }
+        }));
     }
 
     // Returns true when the message was handled asynchronously, null otherwise.

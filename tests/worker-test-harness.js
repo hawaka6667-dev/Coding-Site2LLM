@@ -87,15 +87,24 @@ function loadCoreWorker() {
     return context;
 }
 
-function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}, selectedText = "") {
+function loadKeyboardShortcuts(
+    hostname = "example.com",
+    savedShortcuts = {},
+    selectedText = "",
+    customLlmProviders = []
+) {
     const listeners = [];
     const windowListeners = [];
     const messages = [];
     const context = vm.createContext({
         chrome: {
-            storage: { local: { get: async () => ({ codingSite2LlmShortcuts: savedShortcuts }) } },
+            storage: { local: { get: async () => ({
+                codingSite2LlmShortcuts: savedShortcuts,
+                customLlmProviders
+            }) } },
             runtime: { sendMessage: message => messages.push(message) }
         },
+        URL,
         document: {
             visibilityState: "visible",
             addEventListener: (type, listener) => listeners.push({ type, listener })
@@ -104,8 +113,15 @@ function loadKeyboardShortcuts(hostname = "example.com", savedShortcuts = {}, se
             getSelection: () => ({ toString: () => selectedText }),
             addEventListener: (type, listener) => windowListeners.push({ type, listener })
         },
-        location: { hostname }
+        location: {
+            hostname,
+            href: `https://${hostname}/`
+        }
     });
+    vm.runInContext(
+        fs.readFileSync(path.join(ROOT_DIR, "worker/llm_provider_config.js"), "utf8"),
+        context
+    );
     vm.runInContext(
         fs.readFileSync(path.join(ROOT_DIR, "worker", "keyboard_shortcuts.js"), "utf8"),
         context

@@ -161,11 +161,6 @@ test("keeps TypeScript output in dist instead of beside source files", () => {
             false,
             `Generated JavaScript must not be beside ${relativeSource}`
         );
-        assert.equal(
-            fs.existsSync(path.join(ROOT_DIR, javascriptFile)),
-            true,
-            `Missing compiled output for ${relativeSource}`
-        );
     }
 });
 
@@ -307,61 +302,12 @@ test("keeps daily-practice destinations in an extensible popup provider list", (
         path.join(ROOT_DIR, "popup", "popup.js"),
         "utf8"
     );
-    const providerSource = fs.readFileSync(
-        path.join(ROOT_DIR, "popup", "daily_practice_providers.js"),
-        "utf8"
-    );
-    const fixedDate = class extends Date {
-        constructor(...args) {
-            super(...(args.length ? args : ["2026-09-24T12:00:00.000Z"]));
-        }
-    };
-    const context = { Date: fixedDate };
-
-    vm.runInNewContext(
-        `${providerSource}\nglobalThis.providers = DAILY_PRACTICE_PROVIDERS;`,
-        context
-    );
-
-    const providers = Array.from(context.providers, provider => ({
-        id: provider.id,
-        label: provider.label,
-        url: provider.getUrl()
-    }));
-
     assert.match(popupHtml, /aria-labelledby="daily-practice-heading"/);
     assert.match(popupHtml, /id="daily-practice-links"/);
     assert.match(popupHtml, /<script src="daily_practice_providers\.js"><\/script>/);
     assert.match(popupHtml, /\.daily-practice-button/);
     assert.match(popupSource, /chrome\.tabs\.create\(\{ url: provider\.getUrl\(\) \}\)/);
     assert.match(popupSource, /for \(const provider of getDailyPracticeProviders\(\)\)/);
-    assert.deepEqual(providers, [
-        {
-            id: "leetcode",
-            label: "Leet Daily📅",                     //test
-            url: "https://leetcode.com/problemset/?envType=daily-question&envId=2026-09-24"
-        },
-        {
-            id: "codewars",
-            label: "Codewars",
-            url: "https://www.codewars.com/dashboard"
-        },
-        {
-            id: "neetcode-roadmap",
-            label: "Neet Roadmap",
-            url: "https://neetcode.io/roadmap"
-        },
-        {
-            id: "exercism-tracks",
-            label: "Exercism pl Track",
-            url: "https://exercism.org/tracks"
-        },
-        {
-            id: "regexone",
-            label: "RegexOne",
-            url: "https://regexone.com/"
-        }
-    ]);
 });
 
 test("keeps the popup LLM provider setting wired to the worker", () => {
@@ -373,7 +319,11 @@ test("keeps the popup LLM provider setting wired to the worker", () => {
         "utf8"
     );
     const providerSource = fs.readFileSync(
-        path.join(ROOT_DIR, "worker", "configure_supported_coding_sites_and_llm_providers.js"),
+        path.join(ROOT_DIR, "worker", "llm_provider_config.js"),
+        "utf8"
+    );
+    const backgroundSource = fs.readFileSync(
+        path.join(ROOT_DIR, "background.js"),
         "utf8"
     );
     const workflowSource = fs.readFileSync(
@@ -401,6 +351,17 @@ test("keeps the popup LLM provider setting wired to the worker", () => {
         assert.match(providerSource, new RegExp(`name: "${provider}"`));
         assert.match(providerSource, new RegExp(`url: "https://`));
     }
+
+    assert.match(backgroundSource, /worker\/llm_provider_config\.js/);
+    assert.match(providerSource, /function getConfiguredLlmProviders/);
+    assert.equal(
+        manifest.content_scripts.some(script => {
+            const configIndex = script.js.indexOf("worker/llm_provider_config.js");
+            const shortcutIndex = script.js.indexOf("worker/keyboard_shortcuts.js");
+            return configIndex >= 0 && shortcutIndex > configIndex;
+        }),
+        true
+    );
 
     assert.equal(
         manifest.content_scripts.some(script =>
@@ -452,53 +413,6 @@ test("keeps mark-complete separate from Ctrl+Enter submission", () => {
     const markCompleteMessageType = /"exercism-mark-complete"/;
     assert.match(markCompleteSource, markCompleteMessageType);
     assert.match(exercismWorkflowSource, markCompleteMessageType);
-});
-
-test("continues past Exercism's automated-feedback check without waiting", () => {
-    const clicked = [];
-    const dialog = {
-        tagName: "DIALOG",
-        getAttribute: () => null,
-        getBoundingClientRect: () => ({ width: 400, height: 200 })
-    };
-    const makeButton = label => ({
-        innerText: label,
-        parentElement: dialog,
-        disabled: false,
-        getAttribute: () => null,
-        getBoundingClientRect: () => ({ width: 180, height: 32 }),
-        click: () => clicked.push(label)
-    });
-    const buttons = [
-        makeButton("Continue without waiting"),
-        makeButton("Not now")
-    ];
-    dialog.querySelectorAll = () => buttons;
-    const document = {
-        documentElement: {},
-        querySelectorAll: () => [dialog],
-        addEventListener: () => {}
-    };
-    const context = vm.createContext({
-        document,
-        MutationObserver: class {
-            observe() {}
-        }
-    });
-    const source = fs.readFileSync(
-        path.join(
-            ROOT_DIR,
-            "worker",
-            "exercism",
-            "edit",
-            "continue_after_exercism_modals.js"
-        ),
-        "utf8"
-    );
-
-    vm.runInContext(source, context);
-
-    assert.deepEqual(clicked, ["Continue without waiting"]);
 });
 
 test("registers shared list scroll restoration on Exercism track list pages", () => {

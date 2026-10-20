@@ -9,19 +9,19 @@ const DEFAULT_SHORTCUTS = Object.freeze({
     "smart-return": ["Alt+Q", "Mouse5"]
 });
 const SHORTCUTS_KEY = "codingSite2LlmShortcuts";
-const LLM_HOSTS = new Set([
-    "chat.deepseek.com",
-    "chatgpt.com",
-    "chat.openai.com",
-    "claude.ai",
-    "gemini.google.com",
-    "deepai.org"
-]);
+const CUSTOM_LLM_PROVIDERS_KEY = "customLlmProviders";
 const SHORTCUT_HELD_STALE_TIMEOUT_MS = 1000;
 let shortcutHeld = false;
 let heldShortcut = "";
 let shortcutHeldAt = 0;
 let shortcuts = normalizeShortcuts();
+let customLlmProviders = [];
+
+function isLlmProviderPage() {
+    return getLlmProviders(customLlmProviders).some(provider =>
+        provider.match(location.href)
+    );
+}
 
 function shortcutMatches(event, shortcut) {
     if (!shortcut) {
@@ -134,14 +134,20 @@ function getBindingKey(binding) {
 }
 
 chrome.storage.onChanged?.addListener((changes, areaName) => {
-    if (areaName === "local" && changes[SHORTCUTS_KEY]) {
-        shortcuts = normalizeShortcuts(changes[SHORTCUTS_KEY].newValue);
+    if (areaName === "local") {
+        if (changes[SHORTCUTS_KEY]) {
+            shortcuts = normalizeShortcuts(changes[SHORTCUTS_KEY].newValue);
+        }
+        if (changes[CUSTOM_LLM_PROVIDERS_KEY]) {
+            customLlmProviders = changes[CUSTOM_LLM_PROVIDERS_KEY].newValue || [];
+        }
     }
 });
 
-chrome.storage.local.get(SHORTCUTS_KEY)
+chrome.storage.local.get([SHORTCUTS_KEY, CUSTOM_LLM_PROVIDERS_KEY])
     .then(stored => {
         shortcuts = normalizeShortcuts(stored[SHORTCUTS_KEY]);
+        customLlmProviders = stored[CUSTOM_LLM_PROVIDERS_KEY] || [];
     })
     .catch(() => {});
 
@@ -157,7 +163,7 @@ document.addEventListener("keydown", event => {
         releaseShortcut();
     }
 
-    const command = LLM_HOSTS.has(location.hostname)
+    const command = isLlmProviderPage()
         ? "smart-return"
         : "send-context";
     const binding = shortcuts[command].find(shortcut => shortcutMatches(event, shortcut));
@@ -173,7 +179,7 @@ document.addEventListener("mousedown", event => {
         return;
     }
 
-    const command = LLM_HOSTS.has(location.hostname)
+    const command = isLlmProviderPage()
         ? "smart-return"
         : "send-context";
     const binding = shortcuts[command].find(shortcut => shortcutMatches(event, shortcut));

@@ -6,6 +6,7 @@ contract: preserve import order; later files consume earlier globals
 importScripts(
     "worker/diagnostics.js",
     "worker/manage_icon_theme.js",
+    "worker/llm_provider_config.js",
     "worker/configure_supported_coding_sites_and_llm_providers.js",
     "worker/inject_scripts_and_control_coding_page.js",
     "worker/adapters/exercism_edit_adapter.js",

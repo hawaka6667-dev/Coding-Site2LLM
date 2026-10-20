@@ -43,7 +43,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | Exercism overview redirect, auto-completion and submitted-window lifecycle | `src/worker/exercism/overview/open_exercise_in_editor.js`, `src/worker/exercism/overview/auto_mark_exercise_complete.js`, `src/worker/exercism/submitted_overview/`, `src/worker/workflows/exercism_workflow.ts` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism track-list scroll restoration | `src/worker/exercism/preserve_track_list_scroll_position.js` | `npm run test:routing` 和 `npm run test:contracts` |
 | Exercism editor bridge and submission | `src/worker/exercism/edit/content.js`, `src/worker/adapters/exercism_edit_adapter.ts`, `src/worker/workflows/smart_return/smart_return_workflow.ts`, `src/worker/workflows/exercism_workflow.ts`, `src/worker/exercism/edit/auto_submit_after_manual_run.js`, `src/worker/exercism/submitted_overview/open_submitted_overview_after_submit.js` | `npm run test:unit` 和 `npm run test:routing` |
-| Smart Return route lifecycle and code write-back | `src/worker/workflows/smart_return/`, `src/worker/adapters/` | `npm run test:smart-return` |
+| Smart Return provider routes, lifecycle and code write-back | `src/worker/llm_provider_config.js`, `src/worker/workflows/smart_return/`, `src/worker/adapters/` | `npm run test:smart-return` 和 `node --test tests/worker/keyboard-shortcuts.test.js` |
 | Codewars Smart Return write-back and full-suite attempt | `src/worker/adapters/codewars_adapter.ts`, `src/worker/workflows/smart_return/smart_return_workflow.ts` | `npm run test:unit` |
 | Exercism modal dismissal | `src/worker/exercism/dismiss_dialogs.js`, `tests/exercism/edit/continue-dialogs.test.js`, `tests/exercism/track/donation-modal.test.js` | `npm run test:unit` 和 `npm run test:contracts` |
 | core workflow operation logs and debug-module refactor | `src/worker/debug/` (planned), `src/worker/diagnostics.js`, `src/worker/workflows/`, `src/worker/exercism/overview/auto_mark_exercise_complete.js` | `npm run test:unit` 和 `npm run test:routing` |
@@ -51,7 +51,7 @@ extension 是 context-transport layer，不负责替用户分析、总结或改�
 | SQLBolt Run Query shortcut | `src/worker/sqlbolt/run_query.js`, `src/manifest.json` | `npm run test:unit` 和 `npm run test:contracts` |
 | LearnCodeFast 课程页自动化 | `src/worker/learncodefast/course_page_automation.js`, `src/manifest.json` | `node --test tests/worker/learncodefast-mark-complete.test.js` 和 `npm run test:contracts` |
 | Computable Secrets lesson 自动检查、展开 worked solution 与左右键导航 | `src/worker/computable_secrets/lesson_navigation.js`, `src/manifest.json` | `node --test tests/worker/computable-secrets-lesson-navigation.test.js` 和 `npm run test:contracts` |
-| LLM provider options, popup selection and routing | `src/options/options.js`, `src/popup/popup.js`, `src/worker/configure_supported_coding_sites_and_llm_providers.ts`, `src/worker/workflows/run_coding_context_to_llm_workflow.ts` | `npm run test:unit`, `npm run test:routing`, `npm run test:contracts` |
+| LLM provider options, popup selection and routing | `src/options/options.js`, `src/popup/popup.js`, `src/worker/llm_provider_config.js`, `src/worker/configure_supported_coding_sites_and_llm_providers.ts`, `src/worker/workflows/run_coding_context_to_llm_workflow.ts` | `npm run test:unit`, `npm run test:routing`, `npm run test:contracts` |
 | extension injection、manifest 和页面本地资源 | `src/manifest.json`, `src/options/`, `src/popup/` | `npm run test:contracts` |
 | development environment and generated package | `tests/dev-check.ps1`, `package.json`, `src/manifest.json`, `dist/` | `npm run dev:check` |
 
@@ -169,7 +169,9 @@ smart-return  : LLM page -> source coding page
 
 快捷键等设计必须符合人体工学：一次按键组合在用户释放前只能触发一次。页面侧用 `event.repeat` 和 held 状态拦截长按重复事件；Service Worker 收到 `keyup` 的释放消息后立即解锁，超时只作为释放消息丢失时的异常兜底，不能被当作正常的快捷键间隔。兜底时间应明显长于普通人的按住时长，避免用户仍在按键时再次触发工作流。
 
-LLM 页的返回路由按 `windowId + llmTabId` 保存。一次发送会把当前 coding 页记录为该 LLM 页的当前返回页；来源页关闭后删除该路由和关联复制文本，不跳转到其它标签页；下一次显式发送再建立新路由。
+LLM provider 的 URL 匹配由 `worker/llm_provider_config.js` 提供，service worker 和页面快捷键桥接共用同一份内置/自定义 provider 规则。provider shortcut 命中后使用现有 `smart-return` 入口；custom provider 从 `customLlmProviders` 读取，并按配置 URL 的 exact origin 匹配。
+
+Smart Return route 按 `windowId + llmTabId` 独立保存，使每个 provider 标签页拥有自己的 route revision 和复制 payload。coding 页面显式发送或 popup 手动设置 target 时，当前窗口所有已打开的受支持 provider 标签页都会关联到同一个 source tab；同一 source tab 关闭时清除所有关联 routes。此后新打开的受支持 provider 可继承该窗口最近维护的 source target，并在首次 copy/return 时建立自己的 route；copy 文本不会跨 provider 标签页共享。
 
 返回路由是用户通过 `send-context`（默认 Alt+Q；popup 使用同一 workflow）明确建立的维护授权，按 `windowId + llmTabId` 关联到发送时的 source tab。来源 tab 的硬导航、History API 和 hash 导航不会删除 route；Smart Return 执行时重新查询并激活同一个 `sourceTabId`。来源 tab 或 LLM tab 关闭时，才清除对应 route 和复制 payload；不跳转到其它标签页。
 
@@ -216,7 +218,8 @@ Smart Return 成功回填后启动的站点测试/提交属于 adapter 的独立
 | `worker/diagnostics.js` | 为页面 content script 与 Service Worker 提供脱敏的结构化操作日志及 `operationId` | 记录页面正文、prompt、剪贴板或用户代码；输出高频轮询/DOM 变更日志 |
 | `worker/workflows/run_coding_context_to_llm_workflow.ts` | 捕获 coding context、请求 Smart Return 模块建立发送来源 route、选择 LLM 并发送 prompt；维护快捷键锁和 runtime message dispatch | route 持久化实现、Smart Return 回跳与代码写入、Exercism 窗口生命周期 |
 | `options/options.js` | 保存 Options 页面设置及用户自定义 LLM provider；provider 名称不能与内置项或其它自定义项重名，地址只允许 HTTP(S) | popup provider 选择和 worker tab 查找 |
-| `worker/configure_supported_coding_sites_and_llm_providers.ts` | 定义内置 provider 元数据，并把有效自定义 provider URL 解析为 origin 匹配规则 | 用户设置 UI、prompt 捕获 |
+| `worker/llm_provider_config.js` | 定义内置 provider 元数据、有效自定义 provider origin 匹配，并供 service worker 与快捷键 content script 共用 | 用户设置 UI、prompt 捕获 |
+| `worker/configure_supported_coding_sites_and_llm_providers.ts` | 声明共享 provider 配置类型并定义 coding-site 输入 selector | provider 匹配规则、用户设置 UI |
 | `worker/llm_copy_tracker.js` | 在 HTTP(S) 页面转发显式复制文本，供已建立的 Smart Return route 使用 | provider 管理、route 存储 |
 | `worker/sqlbolt/run_query.js` | 仅在 SQLBolt lesson 的编辑器聚焦时，将 Ctrl+Enter 转发到同一编辑器容器的 `RUN QUERY` 链接 | SQLBolt 页面以外的快捷键、其它站点编辑器 |
 | `worker/adam_math_hhu/level_navigation.js` | 将 Adam Math HHU 关卡页的左右方向键映射到 Previous/Next level；事件目标或当前焦点位于可编辑控件/Monaco 时不拦截 | 代码编辑器输入与其它站点快捷键 |

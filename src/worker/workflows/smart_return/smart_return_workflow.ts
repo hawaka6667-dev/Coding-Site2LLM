@@ -11,7 +11,18 @@ namespace SmartReturn {
         llmTab: chrome.tabs.Tab,
         operationId: string
     ) {
-        const route = await routes.get(llmTab.windowId, llmTab.id);
+        let route = await routes.get(llmTab.windowId, llmTab.id);
+        if (!route) {
+            const sharedRoute = await routes.getLatestForWindow(llmTab.windowId);
+            if (sharedRoute) {
+                route = await routes.save({
+                    ...sharedRoute,
+                    llmTabId: llmTab.id,
+                    copied: false,
+                    copiedText: ""
+                });
+            }
+        }
 
         if (!route) {
             (globalThis as any).CodingSite2LlmDiagnostics.log(

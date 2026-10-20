@@ -48,6 +48,15 @@ namespace SmartReturn {
             return Object.values(routes).filter(route => route.windowId === windowId);
         }
 
+        async getLatestForWindow(windowId: number) {
+            const routes = await this.listForWindow(windowId);
+            return routes.reduce<Route | null>((latest, route) =>
+                !latest || (route.routeRevision || 0) > (latest.routeRevision || 0)
+                    ? route
+                    : latest,
+            null);
+        }
+
         updateIfCurrent(
             expectedRoute: Route,
             updates: Partial<Route>

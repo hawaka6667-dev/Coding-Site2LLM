@@ -215,7 +215,8 @@ test("shows and manually changes the Smart Return target", async () => {
     const tabA = { id: 11, windowId: 7, title: "A", url: "https://course.example/a" };
     const tabB = { id: 12, windowId: 7, title: "B", url: "https://course.example/b" };
     const llmTab = { id: 22, windowId: 7, title: "chat", url: "https://chat.deepseek.com/a/chat/s/test" };
-    context.tabState.push(tabA, tabB, llmTab);
+    const secondLlmTab = { id: 23, windowId: 7, title: "claude", url: "https://claude.ai/" };
+    context.tabState.push(tabA, tabB, llmTab, secondLlmTab);
     context.chrome.tabs.get = async tabId => context.tabState.find(tab => tab.id === tabId);
 
     let state = await context.SmartReturn.getTargetState(7, 22);
@@ -224,11 +225,55 @@ test("shows and manually changes the Smart Return target", async () => {
     assert.deepEqual(state.candidates.map(tab => tab.tabId), [11, 12]);
 
     await context.SmartReturn.setTarget(22, 11);
-    state = await context.SmartReturn.getTargetState(7, 11);
-    assert.equal(state.llmTabId, 22);
+    state = await context.SmartReturn.getTargetState(7, 23);
+    assert.equal(state.llmTabId, 23);
     assert.equal(state.target.tabId, 11);
 
     await context.SmartReturn.setTarget(22, 12);
     assert.equal((await context.SmartReturn.routes.get(7, 22)).sourceTabId, 12);
+    assert.equal((await context.SmartReturn.routes.get(7, 23)).sourceTabId, 12);
+
+    const laterProviderTab = {
+        id: 24,
+        windowId: 7,
+        title: "Kimi",
+        url: "https://kimi.com/"
+    };
+    context.tabState.push(laterProviderTab);
+    state = await context.SmartReturn.getTargetState(7, laterProviderTab.id);
+    assert.equal(state.target.tabId, 12);
+
+    await context.SmartReturn.recordCopy(laterProviderTab.id, "Kimi answer");
+    const laterProviderRoute = await context.SmartReturn.routes.get(7, laterProviderTab.id);
+    assert.equal(laterProviderRoute.sourceTabId, 12);
+    assert.equal(laterProviderRoute.copiedText, "Kimi answer");
+});
+
+test("records copied payloads for configured custom provider tabs", async () => {
+    const context = loadCoreWorker();
+    const sourceTab = { id: 11, windowId: 7, url: "https://course.example/a" };
+    const customLlmTab = { id: 23, windowId: 7, url: "https://llm.example/chat" };
+    context.tabState.push(sourceTab, customLlmTab);
+    context.chrome.storage = {
+        local: {
+            get: async () => ({
+                customLlmProviders: [{ name: "Custom LLM", url: "https://llm.example/" }]
+            }),
+            set: async () => {}
+        }
+    };
+    await context.SmartReturn.routes.save({
+        windowId: 7,
+        llmTabId: 23,
+        sourceTabId: 11,
+        copied: false,
+        copiedText: ""
+    });
+
+    await context.SmartReturn.recordCopy(23, "custom provider answer");
+
+    const route = await context.SmartReturn.routes.get(7, 23);
+    assert.equal(route.copied, true);
+    assert.equal(route.copiedText, "custom provider answer");
 });
 

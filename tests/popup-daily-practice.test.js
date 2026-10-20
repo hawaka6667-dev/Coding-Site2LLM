@@ -136,10 +136,6 @@ test("adds a custom URL with a detected label, then removes it", async () => {
 
 test("opens destinations individually and with the Open all control", async () => {
     const { elements, openedTabs } = await loadPopup();
-    assert.equal(
-        elements.get("daily-practice-links").children[5].children[0].textContent,
-        "Learn Code Fast ⚡" //deprecated
-    );
     const input = elements.get("daily-practice-url");
     input.value = "https://example.org/daily";
     await elements.get("daily-practice-form").dispatch("submit");

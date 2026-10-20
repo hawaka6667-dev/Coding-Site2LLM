@@ -124,20 +124,7 @@ async function runWorkflowOnce(selectedText = "", operationId: string) {
         await getSelectedLlmProvider()
     );
     const llmTab = llm.tab;
-    await SmartReturn.routes.save({
-        windowId: currentTab.windowId,
-        sourceTabId: currentTab.id,
-        llmTabId: llmTab.id,
-        sourcePlatform: platform.name,
-        sourceUrl: currentTab.url || "",
-        sourceIdentity: getCodingPageIdentity(
-            currentTab.url || "",
-            platform.name
-        ),
-        status: "routed",
-        copied: false,
-        copiedText: ""
-    });
+    await SmartReturn.setTarget(llmTab.id, currentTab.id);
     (globalThis as any).CodingSite2LlmDiagnostics.log(
         "send-context",
         operationId,

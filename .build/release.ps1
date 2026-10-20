@@ -37,9 +37,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($SkipTests) {
-    Write-Warning "Release tests were skipped by explicit request."
+    Write-Warning "Release tests were skipped by explicit request."#❌ 默認是直接發佈！！
 } else {
-    & npm run test:release
+    & npm run test:release    
     if ($LASTEXITCODE -ne 0) {
         throw "Release tests failed."
     }
